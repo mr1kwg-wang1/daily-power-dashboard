@@ -1,0 +1,78 @@
+name: 전력일보 갱신 알림 (텔레그램)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'daily_data.json'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 최신 일자 데이터 추출 및 메시지 생성
+        id: build_message
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          with open('daily_data.json', encoding='utf-8') as f:
+              data = json.load(f)
+
+          days = sorted(data['days'], key=lambda d: d['date'])
+          last = days[-1]
+          prev = days[-2] if len(days) > 1 else None
+
+          def fmt(n, d=0):
+              return f"{n:,.{d}f}" if n is not None else "-"
+
+          def delta_line(label, cur, prv, unit="", decimals=2):
+              if cur is None:
+                  return ""
+              if prv is None:
+                  return f"· {label}: {fmt(cur, decimals)}{unit}"
+              diff = cur - prv
+              pct = (diff / prv * 100) if prv else 0
+              arrow = "🔺" if diff > 0 else ("🔻" if diff < 0 else "➖")
+              return f"· {label}: {fmt(cur, decimals)}{unit} ({arrow} {abs(pct):.1f}% 전일대비)"
+
+          lines = []
+          lines.append(f"⚡ *단양공장 전력일보 갱신 알림*")
+          lines.append(f"📅 {last['date']}")
+          lines.append("")
+          lines.append(delta_line("총 사용량(4개군)", last['total_usage_main4'], prev['total_usage_main4'] if prev else None, " kWh", 0))
+          lines.append(delta_line("전력비용", last['total_cost'], prev['total_cost'] if prev else None, " 원", 0))
+          lines.append("")
+          lines.append("설비군별 원단위 (kWh/t, 기준 상이)")
+          group_labels = {"R": "R(원료분쇄)", "Co": "Co(석탄분쇄)", "K": "K(소성)", "C": "C(시멘트분쇄)"}
+          for k, label in group_labels.items():
+              cur_v = last['groups'].get(k, {}).get('원단위')
+              prv_v = prev['groups'].get(k, {}).get('원단위') if prev else None
+              lines.append(delta_line(label, cur_v, prv_v, " kWh/t"))
+          lines.append("")
+          if last.get('note'):
+              lines.append(f"📝 메모: {last['note']}")
+              lines.append("")
+          lines.append("🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/")
+
+          message = "\n".join([l for l in lines if l is not None and l != ""])
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write("message<<EOF\n")
+              out.write(message)
+              out.write("\nEOF\n")
+          PYEOF
+
+      - name: 텔레그램 발송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE: ${{ steps.build_message.outputs.message }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            --data-urlencode text="${MESSAGE}"
