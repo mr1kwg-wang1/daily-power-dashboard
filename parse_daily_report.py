@@ -3,7 +3,7 @@
 사용법: python parse_daily_report.py <전력일보_YYYY_MM_DD.csv>
 같은 폴더의 daily_data.json 에 해당 일자 데이터를 추가/갱신한다.
 """
-import sys, csv, re, json
+import sys, csv, re, json, datetime
 from pathlib import Path
 
 COLS = {
@@ -41,6 +41,7 @@ def parse_file(path: Path):
     if not m:
         raise ValueError(f"파일명에서 날짜를 찾을 수 없습니다: {path.name}")
     date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    weekday_kr = ["월","화","수","목","금","토","일"][datetime.date.fromisoformat(date_str).weekday()]
 
     equip = {}
     for r in rows[4:]:
@@ -58,30 +59,63 @@ def parse_file(path: Path):
         prod = sum(equip.get(m, {}).get("생산량", 0) for m in members)
         usage = sum(equip.get(m, {}).get("사용량", 0) for m in members)
         cost = sum(equip.get(m, {}).get("비용_합계", 0) for m in members)
+
+        equip_detail = {}
+        gap_candidates = []
+        for m in members:
+            if m not in equip:
+                continue
+            e = equip[m]
+            entry = {
+                "사용량": round(e.get("사용량", 0), 0),
+                "생산량": round(e.get("생산량", 0), 0),
+                "목표_원단위": round(e.get("원단위_목표_part", 0), 2) if e.get("원단위_목표_part") else None,
+                "실적_원단위": round(e.get("원단위_실적_part", 0), 2) if e.get("생산량", 0) > 0 else None,
+            }
+            equip_detail[m] = entry
+            if entry["목표_원단위"] and entry["실적_원단위"] and entry["생산량"] > 0:
+                gap = entry["실적_원단위"] - entry["목표_원단위"]
+                gap_pct = gap / entry["목표_원단위"] * 100
+                gap_candidates.append((m, gap, gap_pct))
+
+        gap_candidates.sort(key=lambda x: -x[2])
+
         groups_out[gkey] = {
             "label": ginfo["label"],
             "생산량": round(prod, 0),
             "사용량": round(usage, 0),
             "원단위": round(usage / prod, 2) if prod else None,
             "전력비용": round(cost, 0),
-            "설비": {m: {"사용량": round(equip.get(m, {}).get("사용량", 0), 0),
-                        "생산량": round(equip.get(m, {}).get("생산량", 0), 0)}
-                     for m in members if m in equip},
+            "설비": equip_detail,
+            "최대목표초과설비": {"설비": gap_candidates[0][0], "목표대비차이": round(gap_candidates[0][1],2), "목표대비율": round(gap_candidates[0][2],1)} if gap_candidates else None,
         }
 
     extra = {name: round(equip.get(name, {}).get("사용량", 0), 0) for name in EXTRA_ITEMS if name in equip}
 
     main_groups_usage = sum(groups_out[g]["사용량"] for g in ["R", "Co", "K", "C"])
-    total_cost = sum(groups_out[g]["전력비용"] for g in GROUPS) 
+    total_cost = sum(groups_out[g]["전력비용"] for g in GROUPS)
+
+    # 요일별 TOU(시간대별 요금) 구조 - 경부하/중간부하/최대부하 비중
+    total_light = sum(equip.get(m, {}).get("비용_경부하", 0) for m in equip if m != "합계")
+    total_mid = sum(equip.get(m, {}).get("비용_중간부하", 0) for m in equip if m != "합계")
+    total_peak = sum(equip.get(m, {}).get("비용_최대부하", 0) for m in equip if m != "합계")
+    tou_total = total_light + total_mid + total_peak
+    tou = {
+        "경부하_비중": round(total_light/tou_total*100, 1) if tou_total else None,
+        "중간부하_비중": round(total_mid/tou_total*100, 1) if tou_total else None,
+        "최대부하_비중": round(total_peak/tou_total*100, 1) if tou_total else None,
+    }
 
     return {
         "date": date_str,
+        "weekday": weekday_kr,
         "source": "file",
         "file_name": path.name,
         "groups": groups_out,
         "extra": extra,
         "total_usage_main4": round(main_groups_usage, 0),
         "total_cost": round(total_cost, 0),
+        "tou": tou,
     }
 
 def main():
