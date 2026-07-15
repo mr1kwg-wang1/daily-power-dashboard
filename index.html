@@ -57,6 +57,9 @@
   .verdict.mid{background:#3a3020; color:#d9a24a;}
   .verdict.warn{background:#3a2020; color:#e08a8a;}
   .rank-badge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--panel2); color:var(--muted); font-size:11px; font-weight:700; margin-right:6px;}
+  .gap-card{background:linear-gradient(135deg,#2a1e1e,#1c2228); border:1px solid #4a2a2a; border-left:3px solid var(--warn); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start;}
+  .gap-card .icon{font-size:16px;}
+  .gap-card .body b{color:var(--warn);}
   footer{padding:20px 32px; color:var(--muted); font-size:12px; border-top:1px solid var(--line);}
 </style>
 </head>
@@ -72,6 +75,7 @@
 <main>
   <div class="kpi-row" id="kpiRow"></div>
   <div id="insightBanner"></div>
+  <div id="gapCard"></div>
 
   <section>
     <h2>일별 총 사용량 추이 (R+Co+K+C, kWh)</h2>
@@ -109,6 +113,16 @@
       <div id="varianceAnalysis"></div>
       <div style="margin-top:10px; font-size:11px; color:var(--muted);">
         ※ 상관계수는 생산량과 사용량의 선형관계를 나타냅니다. 1에 가까우면 "생산량에 비례한 정상 변동", 0에 가까우면 "생산량과 무관한 전력 소모(주의 필요)"를 의미합니다. 최소 5일 이상 데이터가 쌓여야 통계적으로 의미가 있습니다.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>요일별 시간대(TOU) 요금 구조</h2>
+    <div class="card">
+      <div class="chart-wrap"><canvas id="touChart" role="img" aria-label="요일별 TOU 요금 구조"></canvas></div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+        같은 kWh를 쓰더라도 최대부하(가장 비싼 시간대) 비중이 높은 평일과, 최대부하가 없거나 적은 토·일요일은 실제 비용이 다릅니다. 생산 스케줄을 요일별로 조정하면 비용 절감 여지가 있습니다.
       </div>
     </div>
   </section>
@@ -197,6 +211,21 @@ function render(days){
       html += `<div class="note-box">📝 <b>${last.date} 실무자 메모:</b> ${last.note}</div>`;
     }
     insightEl.innerHTML = html;
+  }
+
+  // ---- 목표 대비 실적 초과 설비 카드 (4개 그룹 중 오늘 최대 초과) ----
+  const gapEl = document.getElementById('gapCard');
+  let worstGap = null;
+  CORE_GROUP_KEYS.forEach(g=>{
+    const cand = last.groups[g]?.최대목표초과설비;
+    if (cand && (worstGap==null || cand.목표대비율 > worstGap.목표대비율)) {
+      worstGap = {...cand, group: g};
+    }
+  });
+  if (worstGap && worstGap.목표대비율 > 0) {
+    gapEl.innerHTML = `<div class="gap-card"><span class="icon">🎯</span><div class="body">
+      <b>목표 대비 실적 초과</b> — ${GROUP_LABELS[worstGap.group]} <b>${worstGap.설비}</b>가 목표 원단위 대비 <b>+${worstGap.목표대비율}%</b> 초과 (차이 ${worstGap.목표대비차이 > 0 ? '+' : ''}${worstGap.목표대비차이} kWh/t) — ${last.date} 기준 4개 그룹 중 최대 초과
+    </div></div>`;
   }
 
   // ---- 변동 원인 분석: 그룹별 CV, 상관계수, 분산 기여도 ----
@@ -327,6 +356,24 @@ function render(days){
       plugins:{ legend:{display:false},
         tooltip:{ callbacks:{ label: ctx => '비용: ' + Number(ctx.parsed.y).toLocaleString('ko-KR') + '원' } } },
       scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
+    }
+  });
+
+  const touLabels = days.map((d,i)=>`${dateLabel(d.date)}(${d.weekday||''})`);
+  new Chart(document.getElementById('touChart'), {
+    type:'bar',
+    data:{ labels: touLabels, datasets:[
+      { label:'경부하', data: days.map(d=>d.tou?.경부하_비중 ?? null), backgroundColor:'#5fa876', stack:'s' },
+      { label:'중간부하', data: days.map(d=>d.tou?.중간부하_비중 ?? null), backgroundColor:'#e08a3c', stack:'s' },
+      { label:'최대부하', data: days.map(d=>d.tou?.최대부하_비중 ?? null), backgroundColor:'#c9564a', stack:'s' },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
+        tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + '%' } } },
+      scales:{
+        y:{ stacked:true, max:100, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>v+'%'} },
+        x:{ stacked:true, grid:{display:false}, ticks:{color:'#8a95a1', font:{size:10}} }
+      }
     }
   });
 
