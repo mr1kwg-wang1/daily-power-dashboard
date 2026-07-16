@@ -93,22 +93,35 @@ def parse_file(path: Path):
     extra = {name: round(equip.get(name, {}).get("사용량", 0), 0) for name in EXTRA_ITEMS if name in equip}
 
     main_groups_usage = sum(groups_out[g]["사용량"] for g in ["R", "Co", "K", "C"])
-    total_cost = sum(groups_out[g]["전력비용"] for g in GROUPS)
+    # 전체 설비(그룹 멤버 + 출하/기타/폐열/판매사업) 비용 합계 - 아래 TOU/요금유형 집계와 동일 범위로 통일
+    total_cost = sum(equip.get(m, {}).get("비용_합계", 0) for m in equip if m != "합계")
 
     # 요일별 TOU(시간대별 요금) 구조 - 경부하/중간부하/최대부하 비중
     total_light = sum(equip.get(m, {}).get("비용_경부하", 0) for m in equip if m != "합계")
     total_mid = sum(equip.get(m, {}).get("비용_중간부하", 0) for m in equip if m != "합계")
     total_peak = sum(equip.get(m, {}).get("비용_최대부하", 0) for m in equip if m != "합계")
+    total_base_fee = sum(equip.get(m, {}).get("비용_기본요금", 0) for m in equip if m != "합계")
+    total_usage_fee = sum(equip.get(m, {}).get("비용_사용요금계", 0) for m in equip if m != "합계")
     tou_total = total_light + total_mid + total_peak
     tou = {
         "경부하_비중": round(total_light/tou_total*100, 1) if tou_total else None,
         "중간부하_비중": round(total_mid/tou_total*100, 1) if tou_total else None,
         "최대부하_비중": round(total_peak/tou_total*100, 1) if tou_total else None,
     }
+    fee_type = {
+        "기본요금_비중": round(total_base_fee/total_cost*100, 1) if total_cost else None,
+        "사용요금_비중": round(total_usage_fee/total_cost*100, 1) if total_cost else None,
+    }
+
+    cement_prod = groups_out["C"]["생산량"]
+    cost_per_ton = round(total_cost / cement_prod, 0) if cement_prod else None
+    avg_price_per_kwh = round(total_cost / main_groups_usage, 1) if main_groups_usage else None
+    day_type = "토요일" if weekday_kr == "토" else ("일요일" if weekday_kr == "일" else "평일")
 
     return {
         "date": date_str,
         "weekday": weekday_kr,
+        "day_type": day_type,
         "source": "file",
         "file_name": path.name,
         "groups": groups_out,
@@ -116,6 +129,9 @@ def parse_file(path: Path):
         "total_usage_main4": round(main_groups_usage, 0),
         "total_cost": round(total_cost, 0),
         "tou": tou,
+        "fee_type": fee_type,
+        "cost_per_ton_cement": cost_per_ton,
+        "avg_price_per_kwh": avg_price_per_kwh,
     }
 
 def main():
