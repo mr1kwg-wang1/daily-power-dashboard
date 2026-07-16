@@ -135,6 +135,53 @@
   </section>
 
   <section>
+    <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
+    <div class="card">
+      <table id="dayTypeTable"></table>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+        ※ 토·일 표본이 아직 2일씩으로 적어, 데이터가 더 쌓일수록 신뢰도가 높아집니다.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div class="card">
+        <h2 style="margin-top:0">시멘트 톤당 전력비 추이 (원/톤)</h2>
+        <div class="chart-wrap"><canvas id="costPerTonChart" role="img" aria-label="톤당 전력비 추이"></canvas></div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">평균 전력단가 추이 (원/kWh)</h2>
+        <div class="chart-wrap"><canvas id="avgPriceChart" role="img" aria-label="평균 전력단가 추이"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>요금 유형 구성비 추이 (기본요금 vs 사용요금)</h2>
+    <div class="card">
+      <div class="chart-wrap"><canvas id="feeTypeChart" role="img" aria-label="요금 유형 구성비 추이"></canvas></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>목표 대비 실적 갭 추이 (그룹별)</h2>
+    <div class="card">
+      <div class="chart-wrap"><canvas id="gapTrendChart" role="img" aria-label="목표 대비 실적 갭 추이"></canvas></div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+        각 그룹 내 목표 대비 실적 초과율이 가장 큰 설비 1개의 값입니다. 0%에 가까울수록 목표를 잘 지킨 것입니다.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>기타 항목 사용량 추이 (출하 · 기타 · 폐열 · 판매사업)</h2>
+    <div class="card">
+      <div class="chart-wrap"><canvas id="extraChart" role="img" aria-label="기타 항목 사용량 추이"></canvas></div>
+    </div>
+  </section>
+
+  <section>
     <h2>일별 상세 데이터</h2>
     <div class="card" style="overflow-x:auto;">
       <table id="detailTable"></table>
@@ -307,6 +354,94 @@ function render(days){
   } else {
     equipTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">5일 이상 데이터가 쌓이면 표시됩니다.</td></tr>';
   }
+
+  // ---- 요일 유형별 평균 비교 ----
+  const dayTypeTable = document.getElementById('dayTypeTable');
+  const dayTypes = ['평일','토요일','일요일'];
+  const dtRows = dayTypes.map(t=>{
+    const subset = days.filter(d=>d.day_type===t);
+    if (subset.length===0) return {t, n:0};
+    return {
+      t, n: subset.length,
+      usage: mean(subset.map(d=>d.total_usage_main4)),
+      cost: mean(subset.map(d=>d.total_cost)),
+      price: mean(subset.filter(d=>d.avg_price_per_kwh!=null).map(d=>d.avg_price_per_kwh)),
+    };
+  });
+  let dtHtml = '<tr><th style="text-align:left">구분</th><th>표본일수</th><th>평균 사용량(kWh)</th><th>평균 비용(원)</th><th>평균 단가(원/kWh)</th></tr>';
+  dtRows.forEach(r=>{
+    if (r.n===0) { dtHtml += `<tr><td style="text-align:left">${r.t}</td><td colspan="4" style="color:var(--muted)">데이터 없음</td></tr>`; return; }
+    dtHtml += `<tr><td style="text-align:left">${r.t}</td><td>${r.n}일</td><td>${fmt(r.usage)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.price,1)}</td></tr>`;
+  });
+  dayTypeTable.innerHTML = dtHtml;
+
+  // ---- 톤당 전력비 / 평균단가 추이 ----
+  new Chart(document.getElementById('costPerTonChart'), {
+    type:'line',
+    data:{ labels, datasets:[{
+      label:'톤당 전력비', data: days.map(d=>d.cost_per_ton_cement),
+      borderColor:'#c9564a', backgroundColor:'rgba(201,86,74,0.12)', borderWidth:2, pointRadius:3, fill:true, tension:0.25
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => fmt(ctx.parsed.y) + ' 원/톤' } } },
+      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
+    }
+  });
+
+  new Chart(document.getElementById('avgPriceChart'), {
+    type:'line',
+    data:{ labels, datasets:[{
+      label:'평균 전력단가', data: days.map(d=>d.avg_price_per_kwh),
+      borderColor:'#4c8daa', backgroundColor:'rgba(76,141,170,0.12)', borderWidth:2, pointRadius:3, fill:true, tension:0.25
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ctx.parsed.y + ' 원/kWh' } } },
+      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
+    }
+  });
+
+  // ---- 요금 유형 구성비 추이 ----
+  new Chart(document.getElementById('feeTypeChart'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { label:'사용요금', data: days.map(d=>d.fee_type?.사용요금_비중 ?? null), backgroundColor:'#5fa876', stack:'s' },
+      { label:'기본요금', data: days.map(d=>d.fee_type?.기본요금_비중 ?? null), backgroundColor:'#e08a3c', stack:'s' },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
+        tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + '%' } } },
+      scales:{ y:{ stacked:true, max:100, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>v+'%'} }, x:{ stacked:true, grid:{display:false}, ticks:{color:'#8a95a1'} } }
+    }
+  });
+
+  // ---- 목표 대비 갭 추이 (그룹별, 그날 최대초과 설비 값) ----
+  new Chart(document.getElementById('gapTrendChart'), {
+    type:'line',
+    data:{ labels, datasets: CORE_GROUP_KEYS.map(g=>({
+      label: GROUP_LABELS[g], data: days.map(d=>d.groups[g]?.최대목표초과설비?.목표대비율 ?? null),
+      borderColor: GROUP_COLORS[g], backgroundColor:'transparent', borderWidth:2, pointRadius:3, tension:0.25, spanGaps:true
+    }))},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
+        tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': +' + ctx.parsed.y + '%' } } },
+      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>v+'%'} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
+    }
+  });
+
+  // ---- 기타 항목 사용량 추이 ----
+  const extraKeys = ['출하','기타','폐열','판매사업'];
+  const extraColors = {'출하':'#8f7fe0','기타':'#8a95a1','폐열':'#c9564a','판매사업':'#5fa876'};
+  new Chart(document.getElementById('extraChart'), {
+    type:'line',
+    data:{ labels, datasets: extraKeys.map(k=>({
+      label:k, data: days.map(d=>d.extra?.[k] ?? null),
+      borderColor: extraColors[k], backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:0.25, spanGaps:true
+    }))},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} } },
+      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
+    }
+  });
 
   new Chart(document.getElementById('usageChart'), {
     type:'line',
