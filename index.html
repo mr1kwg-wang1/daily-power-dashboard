@@ -97,40 +97,16 @@
   <section>
     <div class="grid2">
       <div class="card">
-        <h2 style="margin-top:0">설비군별 사용량 비교 (kWh)</h2>
-        <div class="chart-wrap"><canvas id="groupUsageChart" role="img" aria-label="설비군별 사용량 비교"></canvas></div>
+        <h2 style="margin-top:0">요일별 시간대(TOU) 요금 구조</h2>
+        <div class="chart-wrap"><canvas id="touChart" role="img" aria-label="요일별 TOU 요금 구조"></canvas></div>
+        <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+          같은 kWh를 쓰더라도 최대부하(가장 비싼 시간대) 비중이 높은 평일과, 최대부하가 없거나 적은 토·일요일은 실제 비용이 다릅니다.
+        </div>
       </div>
       <div class="card">
         <h2 style="margin-top:0">일별 전력비용 (원)</h2>
         <div class="chart-wrap"><canvas id="costChart" role="img" aria-label="일별 전력비용"></canvas></div>
       </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>변동 원인 분석 (그룹별 기여도)</h2>
-    <div class="card">
-      <div id="varianceAnalysis"></div>
-      <div style="margin-top:10px; font-size:11px; color:var(--muted);">
-        ※ 상관계수는 생산량과 사용량의 선형관계를 나타냅니다. 1에 가까우면 "생산량에 비례한 정상 변동", 0에 가까우면 "생산량과 무관한 전력 소모(주의 필요)"를 의미합니다. 최소 5일 이상 데이터가 쌓여야 통계적으로 의미가 있습니다.
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>요일별 시간대(TOU) 요금 구조</h2>
-    <div class="card">
-      <div class="chart-wrap"><canvas id="touChart" role="img" aria-label="요일별 TOU 요금 구조"></canvas></div>
-      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-        같은 kWh를 쓰더라도 최대부하(가장 비싼 시간대) 비중이 높은 평일과, 최대부하가 없거나 적은 토·일요일은 실제 비용이 다릅니다. 생산 스케줄을 요일별로 조정하면 비용 절감 여지가 있습니다.
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>설비별 변동성 상위 (CV 기준)</h2>
-    <div class="card">
-      <table id="equipVolatilityTable"></table>
     </div>
   </section>
 
@@ -158,23 +134,6 @@
   </section>
 
   <section>
-    <h2>요금 유형 구성비 추이 (기본요금 vs 사용요금)</h2>
-    <div class="card">
-      <div class="chart-wrap"><canvas id="feeTypeChart" role="img" aria-label="요금 유형 구성비 추이"></canvas></div>
-    </div>
-  </section>
-
-  <section>
-    <h2>목표 대비 실적 갭 추이 (그룹별)</h2>
-    <div class="card">
-      <div class="chart-wrap"><canvas id="gapTrendChart" role="img" aria-label="목표 대비 실적 갭 추이"></canvas></div>
-      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-        각 그룹 내 목표 대비 실적 초과율이 가장 큰 설비 1개의 값입니다. 0%에 가까울수록 목표를 잘 지킨 것입니다.
-      </div>
-    </div>
-  </section>
-
-  <section>
     <h2>기타 항목 사용량 추이 (출하 · 기타 · 폐열 · 판매사업)</h2>
     <div class="card">
       <div class="chart-wrap"><canvas id="extraChart" role="img" aria-label="기타 항목 사용량 추이"></canvas></div>
@@ -194,7 +153,7 @@
 </footer>
 
 <script>
-const GROUP_LABELS = {R:"R(원료분쇄)", Co:"Co(석탄분쇄)", K:"K(소성)", C:"C(시멘트분쇄)"};
+const GROUP_LABELS = {R:"R/M(원료분쇄)", Co:"Co/M(석탄분쇄)", K:"K/L(소성)", C:"C/M(시멘트분쇄)"};
 const GROUP_COLORS = {R:"#e08a3c", Co:"#c9564a", K:"#4c8daa", C:"#5fa876"};
 const CORE_GROUP_KEYS = ["R","Co","K","C"];
 
@@ -216,11 +175,15 @@ function render(days){
   const last = days[days.length-1];
   const prev = days.length>1 ? days[days.length-2] : null;
 
+  const totalUnit = (last.total_usage_main4 && last.groups.C.생산량) ? last.total_usage_main4 / last.groups.C.생산량 : null;
+  const prevTotalUnit = (prev && prev.total_usage_main4 && prev.groups.C.생산량) ? prev.total_usage_main4 / prev.groups.C.생산량 : null;
   const kpis = [
-    {label:'총 사용량 (kWh)', val: last.total_usage_main4, prevVal: prev?.total_usage_main4, decimals:0, lowerBetter:null},
+    {label:'Total 전력원단위 (kWh/t)', val: totalUnit, prevVal: prevTotalUnit, decimals:2, lowerBetter:true},
     {label:'전력비용 (원)', val: last.total_cost, prevVal: prev?.total_cost, decimals:0, lowerBetter:true},
-    {label:'R 원단위 (kWh/t)', val: last.groups.R.원단위, prevVal: prev?.groups.R.원단위, decimals:2, lowerBetter:true},
-    {label:'C 원단위 (kWh/t)', val: last.groups.C.원단위, prevVal: prev?.groups.C.원단위, decimals:2, lowerBetter:true},
+    {label:'R/M 원단위 (kWh/t)', val: last.groups.R.원단위, prevVal: prev?.groups.R.원단위, decimals:2, lowerBetter:true},
+    {label:'Co/M 원단위 (kWh/t)', val: last.groups.Co.원단위, prevVal: prev?.groups.Co.원단위, decimals:2, lowerBetter:true},
+    {label:'K/L 원단위 (kWh/t)', val: last.groups.K.원단위, prevVal: prev?.groups.K.원단위, decimals:2, lowerBetter:true},
+    {label:'C/M 원단위 (kWh/t)', val: last.groups.C.원단위, prevVal: prev?.groups.C.원단위, decimals:2, lowerBetter:true},
   ];
   const kpiRow = document.getElementById('kpiRow');
   kpiRow.innerHTML = kpis.map(k=>{
@@ -235,44 +198,53 @@ function render(days){
     return `<div class="kpi"><div class="label">${k.label}</div><div class="value">${fmt(k.val,k.decimals)}</div>${deltaHtml}</div>`;
   }).join('');
 
-  // ---- 인사이트: 전일대비 원단위 변동폭이 가장 큰 설비군 (핵심 4개군 한정) ----
+  // ---- 인사이트: 전일대비 원단위 변동폭 랭킹 (핵심 4개군 전체) ----
   const insightEl = document.getElementById('insightBanner');
   if (prev) {
-    let maxKey = null, maxPct = 0, maxDir = '';
+    const changes = [];
     CORE_GROUP_KEYS.forEach(k=>{
       const cur = last.groups[k]?.원단위;
       const pv = prev.groups[k]?.원단위;
       if (cur!=null && pv!=null && pv!==0) {
         const pct = (cur-pv)/pv*100;
-        if (Math.abs(pct) > Math.abs(maxPct)) { maxPct = pct; maxKey = k; maxDir = pct>0?'상승':'하락'; }
+        changes.push({k, pct, dir: pct>0?'상승':'하락'});
       }
     });
+    changes.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
+
     let html = '';
-    if (maxKey) {
-      html += `<div class="insight-card"><span class="icon">⚠️</span><div class="body">
-        <b>오늘 주목 변화</b> — ${GROUP_LABELS[maxKey]} 원단위가 전일대비 <b>${maxDir} ${Math.abs(maxPct).toFixed(1)}%</b>로 4개 설비군 중 가장 크게 변동했습니다.
-        (설비군별 기준 상이 — 방향성 참고용)
+    changes.forEach((c,i)=>{
+      html += `<div class="insight-card"><span class="icon">${i===0?'⚠️':'▪️'}</span><div class="body">
+        <b>${i+1}위</b> — ${GROUP_LABELS[c.k]} 원단위가 전일대비 <b>${c.dir} ${Math.abs(c.pct).toFixed(1)}%</b> 변동
+        ${i===0 ? ' (설비군별 기준 상이 — 방향성 참고용)' : ''}
       </div></div>`;
-    }
+    });
     if (last.note) {
       html += `<div class="note-box">📝 <b>${last.date} 실무자 메모:</b> ${last.note}</div>`;
     }
     insightEl.innerHTML = html;
   }
 
-  // ---- 목표 대비 실적 초과 설비 카드 (4개 그룹 중 오늘 최대 초과) ----
+  // ---- 목표 대비 실적 초과 설비 카드 (전체 설비 중 상위 5개) ----
   const gapEl = document.getElementById('gapCard');
-  let worstGap = null;
+  const allGaps = [];
   CORE_GROUP_KEYS.forEach(g=>{
-    const cand = last.groups[g]?.최대목표초과설비;
-    if (cand && (worstGap==null || cand.목표대비율 > worstGap.목표대비율)) {
-      worstGap = {...cand, group: g};
-    }
+    const equipMap = last.groups[g]?.설비 || {};
+    Object.entries(equipMap).forEach(([name, e])=>{
+      if (e.목표_원단위 && e.실적_원단위 && e.생산량 > 0) {
+        const diff = e.실적_원단위 - e.목표_원단위;
+        const pct = diff / e.목표_원단위 * 100;
+        if (pct > 0) allGaps.push({group: g, 설비: name, diff, pct});
+      }
+    });
   });
-  if (worstGap && worstGap.목표대비율 > 0) {
-    gapEl.innerHTML = `<div class="gap-card"><span class="icon">🎯</span><div class="body">
-      <b>목표 대비 실적 초과</b> — ${GROUP_LABELS[worstGap.group]} <b>${worstGap.설비}</b>가 목표 원단위 대비 <b>+${worstGap.목표대비율}%</b> 초과 (차이 ${worstGap.목표대비차이 > 0 ? '+' : ''}${worstGap.목표대비차이} kWh/t) — ${last.date} 기준 4개 그룹 중 최대 초과
-    </div></div>`;
+  allGaps.sort((a,b)=>b.pct-a.pct);
+  const topGaps = allGaps.slice(0, 5);
+  if (topGaps.length > 0) {
+    let html = '<div class="gap-card"><span class="icon">🎯</span><div class="body"><b>목표 대비 실적 초과 상위</b><br>';
+    html += topGaps.map((g,i)=>`${i+1}. ${GROUP_LABELS[g.group]} <b>${g.설비}</b>: +${g.pct.toFixed(1)}% (차이 +${g.diff.toFixed(2)} kWh/t)`).join('<br>');
+    html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${last.date} 기준</div></div></div>`;
+    gapEl.innerHTML = html;
   }
 
   // ---- 변동 원인 분석: 그룹별 CV, 상관계수, 분산 기여도 ----
@@ -284,75 +256,6 @@ function render(days){
     const cov = mean(a.map((v,i)=>(v-ma)*(b[i]-mb)));
     const sa=pstdev(a), sb=pstdev(b);
     return (sa>0 && sb>0) ? cov/(sa*sb) : null;
-  }
-
-  const varEl = document.getElementById('varianceAnalysis');
-  if (days.length >= 5) {
-    const usageByGroup = {}, prodByGroup = {}, unitByGroup = {};
-    CORE_GROUP_KEYS.forEach(g=>{
-      usageByGroup[g] = days.map(d=>d.groups[g]?.사용량 ?? 0);
-      prodByGroup[g] = days.map(d=>d.groups[g]?.생산량 ?? 0);
-      unitByGroup[g] = days.map(d=>d.groups[g]?.원단위).filter(v=>v!=null);
-    });
-    const totalUsage = days.map(d=> CORE_GROUP_KEYS.reduce((s,g)=>s+(d.groups[g]?.사용량??0),0));
-    const totalVar = pvariance(totalUsage);
-    const mTotal = mean(totalUsage);
-
-    const rows = CORE_GROUP_KEYS.map(g=>{
-      const cov = mean(usageByGroup[g].map((v,i)=>(v-mean(usageByGroup[g]))*(totalUsage[i]-mTotal)));
-      const contrib = totalVar>0 ? cov/totalVar*100 : 0;
-      const cv = unitByGroup[g].length ? pstdev(unitByGroup[g])/mean(unitByGroup[g])*100 : null;
-      const corr = correlation(prodByGroup[g], usageByGroup[g]);
-      let verdict = 'ok', verdictText = '정상(생산연동)';
-      if (corr!=null && corr < 0.3) { verdict='warn'; verdictText='주의(생산무관 변동)'; }
-      else if (corr!=null && corr < 0.6) { verdict='mid'; verdictText='부분설명'; }
-      return {g, contrib, cv, corr, verdict, verdictText};
-    }).sort((a,b)=>Math.abs(b.contrib)-Math.abs(a.contrib));
-
-    let html = '<table><tr><th style="text-align:left">순위</th><th style="text-align:left">설비군</th><th>총변동 기여도</th><th>원단위 CV</th><th>생산-사용량 상관계수</th><th style="text-align:left">판정</th></tr>';
-    rows.forEach((r,i)=>{
-      html += `<tr>
-        <td style="text-align:left"><span class="rank-badge">${i+1}</span></td>
-        <td style="text-align:left">${GROUP_LABELS[r.g]}</td>
-        <td>${r.contrib.toFixed(1)}%</td>
-        <td>${r.cv!=null ? r.cv.toFixed(1)+'%' : '-'}</td>
-        <td>${r.corr!=null ? r.corr.toFixed(2) : '-'}</td>
-        <td style="text-align:left"><span class="verdict ${r.verdict}">${r.verdictText}</span></td>
-      </tr>`;
-    });
-    html += '</table>';
-    varEl.innerHTML = html;
-  } else {
-    varEl.innerHTML = `<div style="color:var(--muted); font-size:13px;">현재 ${days.length}일치 데이터로는 통계적 분석이 불안정합니다. 5일 이상 누적되면 자동으로 표시됩니다.</div>`;
-  }
-
-  // ---- 설비별 변동성 상위 ----
-  const equipTable = document.getElementById('equipVolatilityTable');
-  if (days.length >= 5) {
-    const equipSeries = {};
-    days.forEach(d=>{
-      CORE_GROUP_KEYS.forEach(g=>{
-        const eq = d.groups[g]?.설비 || {};
-        Object.entries(eq).forEach(([name, info])=>{
-          const key = g+'|'+name;
-          if (!equipSeries[key]) equipSeries[key] = {g, name, vals:[]};
-          equipSeries[key].vals.push(info.사용량);
-        });
-      });
-    });
-    const results = Object.values(equipSeries)
-      .filter(e => e.vals.length >= Math.floor(days.length*0.8) && mean(e.vals) >= 1000)
-      .map(e => ({...e, mean: mean(e.vals), cv: pstdev(e.vals)/mean(e.vals)*100}))
-      .sort((a,b)=>b.cv-a.cv)
-      .slice(0,10);
-
-    let html = '<tr><th style="text-align:left">설비군</th><th style="text-align:left">설비</th><th>평균 사용량(kWh)</th><th>변동계수(CV)</th></tr>';
-    results.forEach(r=>{
-      html += `<tr><td style="text-align:left">${GROUP_LABELS[r.g]}</td><td style="text-align:left">${r.name}</td><td>${fmt(r.mean)}</td><td>${r.cv.toFixed(1)}%</td></tr>`;
-    });
-    equipTable.innerHTML = html;
-  } else {
-    equipTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">5일 이상 데이터가 쌓이면 표시됩니다.</td></tr>';
   }
 
   // ---- 요일 유형별 평균 비교 ----
@@ -400,34 +303,6 @@ function render(days){
     }
   });
 
-  // ---- 요금 유형 구성비 추이 ----
-  new Chart(document.getElementById('feeTypeChart'), {
-    type:'bar',
-    data:{ labels, datasets:[
-      { label:'사용요금', data: days.map(d=>d.fee_type?.사용요금_비중 ?? null), backgroundColor:'#5fa876', stack:'s' },
-      { label:'기본요금', data: days.map(d=>d.fee_type?.기본요금_비중 ?? null), backgroundColor:'#e08a3c', stack:'s' },
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
-        tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + '%' } } },
-      scales:{ y:{ stacked:true, max:100, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>v+'%'} }, x:{ stacked:true, grid:{display:false}, ticks:{color:'#8a95a1'} } }
-    }
-  });
-
-  // ---- 목표 대비 갭 추이 (그룹별, 그날 최대초과 설비 값) ----
-  new Chart(document.getElementById('gapTrendChart'), {
-    type:'line',
-    data:{ labels, datasets: CORE_GROUP_KEYS.map(g=>({
-      label: GROUP_LABELS[g], data: days.map(d=>d.groups[g]?.최대목표초과설비?.목표대비율 ?? null),
-      borderColor: GROUP_COLORS[g], backgroundColor:'transparent', borderWidth:2, pointRadius:3, tension:0.25, spanGaps:true
-    }))},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
-        tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': +' + ctx.parsed.y + '%' } } },
-      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>v+'%'} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
-    }
-  });
-
   // ---- 기타 항목 사용량 추이 ----
   const extraKeys = ['출하','기타','폐열','판매사업'];
   const extraColors = {'출하':'#8f7fe0','기타':'#8a95a1','폐열':'#c9564a','판매사업':'#5fa876'};
@@ -469,18 +344,6 @@ function render(days){
     }
   });
 
-  new Chart(document.getElementById('groupUsageChart'), {
-    type:'bar',
-    data:{ labels, datasets: CORE_GROUP_KEYS.map(k=>({
-      label: GROUP_LABELS[k], data: days.map(d=>d.groups[k]?.사용량 ?? null),
-      backgroundColor: GROUP_COLORS[k], borderRadius:3, maxBarThickness:16
-    }))},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} } },
-      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
-    }
-  });
-
   new Chart(document.getElementById('costChart'), {
     type:'bar',
     data:{ labels, datasets:[{
@@ -513,32 +376,37 @@ function render(days){
   });
 
   const table = document.getElementById('detailTable');
-  const head = `<tr><th>날짜</th><th>총사용량(kWh)</th><th>전일대비</th><th>R</th><th>Co</th><th>K</th><th>C</th><th>전력비용(원)</th></tr>`;
-  const rows = days.map((d, idx)=>{
+  const head = `<tr><th>날짜</th><th>총사용량(kWh)</th><th>전력비용(원)</th><th>Crusher</th><th>R/M</th><th>Co/M</th><th>K/L</th><th>C/M</th><th>전력원단위</th></tr>`;
+  const dayUnit = d => (d.total_usage_main4 && d.groups.C?.생산량) ? d.total_usage_main4 / d.groups.C.생산량 : null;
+  const rows = days.map((d)=>{
     const badge = d.source==='file' ? '<span class="badge file">원본</span>' : '<span class="badge est">추정</span>';
-    let deltaCell = '<td>-</td>';
-    if (idx > 0) {
-      const pv = days[idx-1].total_usage_main4;
-      const cur = d.total_usage_main4;
-      if (pv != null && cur != null && pv !== 0) {
-        const pct = (cur - pv) / pv * 100;
-        const cls = pct > 0 ? 'up' : 'down';
-        const arrow = pct > 0 ? '▲' : '▼';
-        deltaCell = `<td class="delta ${cls}" style="text-align:right">${arrow} ${fmt(Math.abs(pct),1)}%</td>`;
-      }
-    }
     return `<tr>
       <td style="text-align:left">${d.date}${badge}</td>
       <td>${fmt(d.total_usage_main4)}</td>
-      ${deltaCell}
+      <td>${fmt(d.total_cost)}</td>
+      <td>${fmt(d.groups.QR?.원단위,2)}</td>
       <td>${fmt(d.groups.R?.원단위,2)}</td>
       <td>${fmt(d.groups.Co?.원단위,2)}</td>
       <td>${fmt(d.groups.K?.원단위,2)}</td>
       <td>${fmt(d.groups.C?.원단위,2)}</td>
-      <td>${fmt(d.total_cost)}</td>
+      <td>${fmt(dayUnit(d),2)}</td>
     </tr>`;
   }).join('');
-  table.innerHTML = head + rows;
+
+  const avgCol = arr => { const v = arr.filter(x=>x!=null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
+  const avgRow = `<tr style="font-weight:700; border-top:2px solid var(--line);">
+    <td style="text-align:left">평균</td>
+    <td>${fmt(avgCol(days.map(d=>d.total_usage_main4)))}</td>
+    <td>${fmt(avgCol(days.map(d=>d.total_cost)))}</td>
+    <td>${fmt(avgCol(days.map(d=>d.groups.QR?.원단위)),2)}</td>
+    <td>${fmt(avgCol(days.map(d=>d.groups.R?.원단위)),2)}</td>
+    <td>${fmt(avgCol(days.map(d=>d.groups.Co?.원단위)),2)}</td>
+    <td>${fmt(avgCol(days.map(d=>d.groups.K?.원단위)),2)}</td>
+    <td>${fmt(avgCol(days.map(d=>d.groups.C?.원단위)),2)}</td>
+    <td>${fmt(avgCol(days.map(dayUnit)),2)}</td>
+  </tr>`;
+
+  table.innerHTML = head + rows + avgRow;
 }
 </script>
 </body>
