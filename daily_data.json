@@ -5727,7 +5727,8 @@
       "avg_price_per_kwh": 166.3
     },
     {
-      "date": "2026-07-20",
+      ,
+      "note": "예열기 정기보수(6/15)로 K/L 원단위 일시 상승 - 7월 정상화 예상",
       "weekday": "월",
       "day_type": "평일",
       "source": "file",
