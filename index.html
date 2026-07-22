@@ -114,6 +114,23 @@
   </section>
 
   <section>
+    <h2>변동 원인 분석 (그룹별 기여도)</h2>
+    <div class="card">
+      <div id="varianceAnalysis"></div>
+      <div style="margin-top:10px; font-size:11px; color:var(--muted);">
+        ※ 상관계수는 생산량과 사용량의 선형관계를 나타냅니다. 1에 가까우면 "생산량에 비례한 정상 변동", 0에 가까우면 "생산량과 무관한 전력 소모(주의 필요)"를 의미합니다. 최소 5일 이상 데이터가 쌓여야 통계적으로 의미가 있습니다.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>설비별 변동성 상위 (CV 기준)</h2>
+    <div class="card">
+      <table id="equipVolatilityTable"></table>
+    </div>
+  </section>
+
+  <section>
     <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
     <div class="card">
       <table id="dayTypeTable"></table>
@@ -260,6 +277,77 @@ function render(days){
     const cov = mean(a.map((v,i)=>(v-ma)*(b[i]-mb)));
     const sa=pstdev(a), sb=pstdev(b);
     return (sa>0 && sb>0) ? cov/(sa*sb) : null;
+  }
+
+  
+
+  const varEl = document.getElementById('varianceAnalysis');
+  if (days.length >= 5) {
+    const usageByGroup = {}, prodByGroup = {}, unitByGroup = {};
+    CORE_GROUP_KEYS.forEach(g=>{
+      usageByGroup[g] = days.map(d=>d.groups[g]?.사용량 ?? 0);
+      prodByGroup[g] = days.map(d=>d.groups[g]?.생산량 ?? 0);
+      unitByGroup[g] = days.map(d=>d.groups[g]?.원단위).filter(v=>v!=null);
+    });
+    const totalUsage = days.map(d=> CORE_GROUP_KEYS.reduce((s,g)=>s+(d.groups[g]?.사용량??0),0));
+    const totalVar = pvariance(totalUsage);
+    const mTotal = mean(totalUsage);
+
+    const rows = CORE_GROUP_KEYS.map(g=>{
+      const cov = mean(usageByGroup[g].map((v,i)=>(v-mean(usageByGroup[g]))*(totalUsage[i]-mTotal)));
+      const contrib = totalVar>0 ? cov/totalVar*100 : 0;
+      const cv = unitByGroup[g].length ? pstdev(unitByGroup[g])/mean(unitByGroup[g])*100 : null;
+      const corr = correlation(prodByGroup[g], usageByGroup[g]);
+      let verdict = 'ok', verdictText = '정상(생산연동)';
+      if (corr!=null && corr < 0.3) { verdict='warn'; verdictText='주의(생산무관 변동)'; }
+      else if (corr!=null && corr < 0.6) { verdict='mid'; verdictText='부분설명'; }
+      return {g, contrib, cv, corr, verdict, verdictText};
+    }).sort((a,b)=>Math.abs(b.contrib)-Math.abs(a.contrib));
+
+    let html = '<table><tr><th style="text-align:left">순위</th><th style="text-align:left">설비군</th><th>총변동 기여도</th><th>원단위 CV</th><th>생산-사용량 상관계수</th><th style="text-align:left">판정</th></tr>';
+    rows.forEach((r,i)=>{
+      html += `<tr>
+        <td style="text-align:left"><span class="rank-badge">${i+1}</span></td>
+        <td style="text-align:left">${GROUP_LABELS[r.g]}</td>
+        <td>${r.contrib.toFixed(1)}%</td>
+        <td>${r.cv!=null ? r.cv.toFixed(1)+'%' : '-'}</td>
+        <td>${r.corr!=null ? r.corr.toFixed(2) : '-'}</td>
+        <td style="text-align:left"><span class="verdict ${r.verdict}">${r.verdictText}</span></td>
+      </tr>`;
+    });
+    html += '</table>';
+    varEl.innerHTML = html;
+  } else {
+    varEl.innerHTML = `<div style="color:var(--muted); font-size:13px;">현재 ${days.length}일치 데이터로는 통계적 분석이 불안정합니다. 5일 이상 누적되면 자동으로 표시됩니다.</div>`;
+  }
+
+  // ---- 설비별 변동성 상위 ----
+  const equipTable = document.getElementById('equipVolatilityTable');
+  if (days.length >= 5) {
+    const equipSeries = {};
+    days.forEach(d=>{
+      CORE_GROUP_KEYS.forEach(g=>{
+        const eq = d.groups[g]?.설비 || {};
+        Object.entries(eq).forEach(([name, info])=>{
+          const key = g+'|'+name;
+          if (!equipSeries[key]) equipSeries[key] = {g, name, vals:[]};
+          equipSeries[key].vals.push(info.사용량);
+        });
+      });
+    });
+    const results = Object.values(equipSeries)
+      .filter(e => e.vals.length >= Math.floor(days.length*0.8) && mean(e.vals) >= 1000)
+      .map(e => ({...e, mean: mean(e.vals), cv: pstdev(e.vals)/mean(e.vals)*100}))
+      .sort((a,b)=>b.cv-a.cv)
+      .slice(0,10);
+
+    let html = '<tr><th style="text-align:left">설비군</th><th style="text-align:left">설비</th><th>평균 사용량(kWh)</th><th>변동계수(CV)</th></tr>';
+    results.forEach(r=>{
+      html += `<tr><td style="text-align:left">${GROUP_LABELS[r.g]}</td><td style="text-align:left">${r.name}</td><td>${fmt(r.mean)}</td><td>${r.cv.toFixed(1)}%</td></tr>`;
+    });
+    equipTable.innerHTML = html;
+  } else {
+    equipTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">5일 이상 데이터가 쌓이면 표시됩니다.</td></tr>';
   }
 
   // ---- 요일 유형별 평균 비교 ----
