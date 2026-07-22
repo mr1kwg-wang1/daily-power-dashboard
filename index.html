@@ -26,7 +26,10 @@
   header .sub{color:var(--muted); font-size:13px; margin-top:4px;}
   header .updated{font-size:12px; color:var(--muted); text-align:right;}
   main{padding:24px 32px 60px; max-width:1180px; margin:0 auto;}
-  .kpi-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:16px;}
+  .kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px;}
+  .kpi-row .kpi:nth-child(1){grid-column:span 3;}
+  .kpi-row .kpi:nth-child(2){grid-column:span 2;}
+  @media(max-width:820px){.kpi-row{grid-template-columns:repeat(2,1fr);} .kpi-row .kpi:nth-child(1),.kpi-row .kpi:nth-child(2){grid-column:span 1;}}
   .kpi{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px;}
   .kpi .label{font-size:12px; color:var(--muted); margin-bottom:6px;}
   .kpi .value{font-size:24px; font-weight:700;}
@@ -180,6 +183,7 @@ function render(days){
   const kpis = [
     {label:'Total 전력원단위 (kWh/t)', val: totalUnit, prevVal: prevTotalUnit, decimals:2, lowerBetter:true},
     {label:'전력비용 (원)', val: last.total_cost, prevVal: prev?.total_cost, decimals:0, lowerBetter:true},
+    {label:'Crusher 원단위 (kWh/t)', val: last.groups.QR?.원단위, prevVal: prev?.groups.QR?.원단위, decimals:2, lowerBetter:true},
     {label:'R/M 원단위 (kWh/t)', val: last.groups.R.원단위, prevVal: prev?.groups.R.원단위, decimals:2, lowerBetter:true},
     {label:'Co/M 원단위 (kWh/t)', val: last.groups.Co.원단위, prevVal: prev?.groups.Co.원단위, decimals:2, lowerBetter:true},
     {label:'K/L 원단위 (kWh/t)', val: last.groups.K.원단위, prevVal: prev?.groups.K.원단위, decimals:2, lowerBetter:true},
