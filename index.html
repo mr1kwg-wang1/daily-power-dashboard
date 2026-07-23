@@ -100,15 +100,29 @@
   <section>
     <div class="grid2">
       <div class="card">
-        <h2 style="margin-top:0">요일별 시간대(TOU) 요금 구조</h2>
-        <div class="chart-wrap"><canvas id="touChart" role="img" aria-label="요일별 TOU 요금 구조"></canvas></div>
-        <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-          같은 kWh를 쓰더라도 최대부하(가장 비싼 시간대) 비중이 높은 평일과, 최대부하가 없거나 적은 토·일요일은 실제 비용이 다릅니다.
-        </div>
+        <h2 style="margin-top:0">평균 전력단가 추이 (원/kWh)</h2>
+        <div class="chart-wrap"><canvas id="avgPriceChart" role="img" aria-label="평균 전력단가 추이"></canvas></div>
       </div>
+      <div class="card">
+        <h2 style="margin-top:0">시멘트 톤당 전력비 추이 (원/톤)</h2>
+        <div class="chart-wrap"><canvas id="costPerTonChart" role="img" aria-label="톤당 전력비 추이"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
       <div class="card">
         <h2 style="margin-top:0">일별 전력비용 (원)</h2>
         <div class="chart-wrap"><canvas id="costChart" role="img" aria-label="일별 전력비용"></canvas></div>
+      </div>
+  </section>
+
+  <section>
+    <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
+    <div class="card">
+      <table id="dayTypeTable"></table>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+        ※ 토·일 표본이 아직 2일씩으로 적어, 데이터가 더 쌓일수록 신뢰도가 높아집니다.
       </div>
     </div>
   </section>
@@ -127,65 +141,6 @@
     <h2>설비별 변동성 상위 (CV 기준)</h2>
     <div class="card">
       <table id="equipVolatilityTable"></table>
-    </div>
-  </section>
-
-  <section>
-    <h2>만성 목표초과 설비 (최근 7일 중 3회 이상)</h2>
-    <div class="card">
-      <table id="chronicOverageTable"></table>
-      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-        목표 대비 실적 원단위가 실제로 초과(0% 초과)한 날만 집계합니다. 그룹 내 유일 가동 설비를 자동으로 "초과"로 오분류하던 계산 오류를 수정했습니다.
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="grid2">
-      <div class="card">
-        <h2 style="margin-top:0">Co/M(석탄분쇄) 설비별 사용량 추이 (kWh)</h2>
-        <div class="chart-wrap"><canvas id="coEquipChart" role="img" aria-label="콜밀 설비별 사용량 추이"></canvas></div>
-        <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-          5Co·6Co는 밝은 색으로 강조했습니다. 생산량 기록이 없는 날에도 사용량이 유지되는지 확인하는 용도입니다.
-        </div>
-      </div>
-      <div class="card">
-        <h2 style="margin-top:0">Co/M(석탄분쇄) 그룹 사용량 vs 생산량</h2>
-        <div class="chart-wrap"><canvas id="coUsageProdChart" role="img" aria-label="콜밀 그룹 사용량 대 생산량"></canvas></div>
-        <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-          생산량(막대)이 0인데 사용량(선)이 유지되면 생산량 기재 누락을 의심할 수 있습니다.
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
-    <div class="card">
-      <table id="dayTypeTable"></table>
-      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-        ※ 토·일 표본이 아직 2일씩으로 적어, 데이터가 더 쌓일수록 신뢰도가 높아집니다.
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="grid2">
-      <div class="card">
-        <h2 style="margin-top:0">시멘트 톤당 전력비 추이 (원/톤)</h2>
-        <div class="chart-wrap"><canvas id="costPerTonChart" role="img" aria-label="톤당 전력비 추이"></canvas></div>
-      </div>
-      <div class="card">
-        <h2 style="margin-top:0">평균 전력단가 추이 (원/kWh)</h2>
-        <div class="chart-wrap"><canvas id="avgPriceChart" role="img" aria-label="평균 전력단가 추이"></canvas></div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>기타 항목 사용량 추이 (출하 · 기타 · 폐열 · 판매사업)</h2>
-    <div class="card">
-      <div class="chart-wrap"><canvas id="extraChart" role="img" aria-label="기타 항목 사용량 추이"></canvas></div>
     </div>
   </section>
 
@@ -379,72 +334,6 @@ function render(days){
     equipTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">5일 이상 데이터가 쌓이면 표시됩니다.</td></tr>';
   }
 
-  // ---- 만성 목표초과 설비 ----
-  const chronicTable = document.getElementById('chronicOverageTable');
-  {
-    const last7 = days.slice(-7);
-    const overageCount = {};
-    last7.forEach(d=>{
-      CORE_GROUP_KEYS.forEach(g=>{
-        const eq = d.groups[g]?.설비 || {};
-        Object.entries(eq).forEach(([name, info])=>{
-          const target = info.목표_원단위, actual = info.실적_원단위;
-          if (target!=null && actual!=null && info.생산량>0) {
-            const gap_pct = (actual-target)/target*100;
-            if (gap_pct > 0) overageCount[name] = (overageCount[name]||0)+1;
-          }
-        });
-      });
-    });
-    const chronic = Object.entries(overageCount).filter(([k,v])=>v>=3).sort((a,b)=>b[1]-a[1]);
-    if (chronic.length) {
-      let html = '<tr><th>설비</th><th>최근 7일 중 목표초과 횟수</th></tr>';
-      chronic.forEach(([name,cnt])=>{
-        html += `<tr><td>${name}</td><td>${cnt}일</td></tr>`;
-      });
-      chronicTable.innerHTML = html;
-    } else {
-      chronicTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">최근 7일간 3회 이상 목표를 초과한 설비가 없습니다.</td></tr>';
-    }
-  }
-
-  // ---- 콜밀(Co/M) 설비별 사용량 추이 ----
-  const CO_EQUIP_KEYS = ['1Co','2Co','3Co','4Co','5Co','6Co'];
-  const CO_EQUIP_COLORS = {'1Co':'#5a6472','2Co':'#6b7684','3Co':'#7c8794','4Co':'#8a95a1','5Co':'#e08a3c','6Co':'#c9564a'};
-  new Chart(document.getElementById('coEquipChart'), {
-    type:'line',
-    data:{ labels, datasets: CO_EQUIP_KEYS.map(k=>({
-      label:k, data: days.map(d=>d.groups.Co?.설비?.[k]?.사용량 ?? null),
-      borderColor: CO_EQUIP_COLORS[k], backgroundColor:'transparent',
-      borderWidth: (k==='5Co'||k==='6Co') ? 3 : 1.5,
-      pointRadius: (k==='5Co'||k==='6Co') ? 3 : 2,
-      tension:0.25
-    }))},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
-        tooltip:{ callbacks:{ label: ctx=> ctx.dataset.label + ': ' + Number(ctx.parsed.y).toLocaleString('ko-KR') + ' kWh' } } },
-      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
-    }
-  });
-
-  // ---- 콜밀(Co/M) 그룹 사용량 vs 생산량 ----
-  new Chart(document.getElementById('coUsageProdChart'), {
-    data:{ labels, datasets:[
-      { type:'bar', label:'생산량(톤)', data: days.map(d=>d.groups.Co?.생산량 ?? 0),
-        backgroundColor:'rgba(76,141,170,0.5)', yAxisID:'y1', maxBarThickness:22 },
-      { type:'line', label:'사용량(kWh)', data: days.map(d=>d.groups.Co?.사용량 ?? null),
-        borderColor:'#c9564a', backgroundColor:'rgba(201,86,74,0.12)', borderWidth:2, pointRadius:3, fill:true, tension:0.25, yAxisID:'y' }
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} } },
-      scales:{
-        y:{ position:'left', grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} },
-        y1:{ position:'right', grid:{display:false}, ticks:{color:'#8a95a1'} },
-        x:{ grid:{display:false}, ticks:{color:'#8a95a1'} }
-      }
-    }
-  });
-
   // ---- 요일 유형별 평균 비교 ----
   const dayTypeTable = document.getElementById('dayTypeTable');
   const dayTypes = ['평일','토요일','일요일'];
@@ -490,21 +379,6 @@ function render(days){
     }
   });
 
-  // ---- 기타 항목 사용량 추이 ----
-  const extraKeys = ['출하','기타','폐열','판매사업'];
-  const extraColors = {'출하':'#8f7fe0','기타':'#8a95a1','폐열':'#c9564a','판매사업':'#5fa876'};
-  new Chart(document.getElementById('extraChart'), {
-    type:'line',
-    data:{ labels, datasets: extraKeys.map(k=>({
-      label:k, data: days.map(d=>d.extra?.[k] ?? null),
-      borderColor: extraColors[k], backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:0.25, spanGaps:true
-    }))},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} } },
-      scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
-    }
-  });
-
   new Chart(document.getElementById('usageChart'), {
     type:'line',
     data:{ labels, datasets:[{
@@ -541,24 +415,6 @@ function render(days){
       plugins:{ legend:{display:false},
         tooltip:{ callbacks:{ label: ctx => '비용: ' + Number(ctx.parsed.y).toLocaleString('ko-KR') + '원' } } },
       scales:{ y:{ grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>Number(v).toLocaleString('ko-KR')} }, x:{ grid:{display:false}, ticks:{color:'#8a95a1'} } }
-    }
-  });
-
-  const touLabels = days.map((d,i)=>`${dateLabel(d.date)}(${d.weekday||''})`);
-  new Chart(document.getElementById('touChart'), {
-    type:'bar',
-    data:{ labels: touLabels, datasets:[
-      { label:'경부하', data: days.map(d=>d.tou?.경부하_비중 ?? null), backgroundColor:'#5fa876', stack:'s' },
-      { label:'중간부하', data: days.map(d=>d.tou?.중간부하_비중 ?? null), backgroundColor:'#e08a3c', stack:'s' },
-      { label:'최대부하', data: days.map(d=>d.tou?.최대부하_비중 ?? null), backgroundColor:'#c9564a', stack:'s' },
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} },
-        tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + '%' } } },
-      scales:{
-        y:{ stacked:true, max:100, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1', callback:v=>v+'%'} },
-        x:{ stacked:true, grid:{display:false}, ticks:{color:'#8a95a1', font:{size:10}} }
-      }
     }
   });
 
