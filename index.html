@@ -41,6 +41,10 @@
   .insight-card .body b{color:var(--accent);}
   .note-box{margin-top:6px; font-size:12px; color:var(--muted); background:#20262d; border-left:2px solid var(--accent2); padding:6px 10px; border-radius:4px;}
   .note-box b{color:var(--accent2);}
+  .memo-box{margin-top:10px; font-size:12px; color:var(--muted); background:#20262d; border:1px dashed var(--warn); border-radius:6px; padding:10px 12px;}
+  .memo-box label{display:block; margin-bottom:6px; color:var(--warn); font-weight:600;}
+  .memo-box textarea{width:100%; min-height:60px; resize:vertical; background:#171b20; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:8px; font-family:inherit; font-size:12.5px; box-sizing:border-box;}
+  .memo-box .memo-hint{margin-top:4px; font-size:10.5px; color:var(--accent2); min-height:14px;}
   section{margin-bottom:32px;}
   section h2{font-size:15px; font-weight:700; margin:0 0 12px; color:var(--text); border-left:3px solid var(--accent); padding-left:10px;}
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
@@ -226,7 +230,27 @@ function render(days){
     if (last.note) {
       html += `<div class="note-box">📝 <b>${last.date} 실무자 메모:</b> ${last.note}</div>`;
     }
+    html += `<div class="memo-box">
+      <label for="localMemoInput">📝 실무자 메모 (이 브라우저에만 저장됩니다)</label>
+      <textarea id="localMemoInput" placeholder="이상 확인 시 원인·조치사항·확인 필요 사항 등을 기록해두세요"></textarea>
+      <div class="memo-hint" id="memoSaveHint"></div>
+    </div>`;
     insightEl.innerHTML = html;
+    const memoKey = 'powerDashboardMemo_' + last.date;
+    const memoInput = document.getElementById('localMemoInput');
+    const memoHint = document.getElementById('memoSaveHint');
+    if (memoInput) {
+      const saved = localStorage.getItem(memoKey);
+      if (saved) memoInput.value = saved;
+      let saveTimer = null;
+      memoInput.addEventListener('input', () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          localStorage.setItem(memoKey, memoInput.value);
+          if (memoHint) memoHint.textContent = '저장됨 ' + new Date().toLocaleTimeString('ko-KR');
+        }, 500);
+      });
+    }
   }
 
   // ---- 목표 대비 실적 초과 설비 카드 (전체 설비 중 상위 5개) ----
