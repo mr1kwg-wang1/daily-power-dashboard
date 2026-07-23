@@ -131,6 +131,16 @@
   </section>
 
   <section>
+    <h2>만성 목표초과 설비 (최근 7일 중 3회 이상)</h2>
+    <div class="card">
+      <table id="chronicOverageTable"></table>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+        목표 대비 실적 원단위가 실제로 초과(0% 초과)한 날만 집계합니다. 그룹 내 유일 가동 설비를 자동으로 "초과"로 오분류하던 계산 오류를 수정했습니다.
+      </div>
+    </div>
+  </section>
+
+  <section>
     <div class="grid2">
       <div class="card">
         <h2 style="margin-top:0">Co/M(석탄분쇄) 설비별 사용량 추이 (kWh)</h2>
@@ -367,6 +377,35 @@ function render(days){
     equipTable.innerHTML = html;
   } else {
     equipTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">5일 이상 데이터가 쌓이면 표시됩니다.</td></tr>';
+  }
+
+  // ---- 만성 목표초과 설비 ----
+  const chronicTable = document.getElementById('chronicOverageTable');
+  {
+    const last7 = days.slice(-7);
+    const overageCount = {};
+    last7.forEach(d=>{
+      CORE_GROUP_KEYS.forEach(g=>{
+        const eq = d.groups[g]?.설비 || {};
+        Object.entries(eq).forEach(([name, info])=>{
+          const target = info.목표_원단위, actual = info.실적_원단위;
+          if (target!=null && actual!=null && info.생산량>0) {
+            const gap_pct = (actual-target)/target*100;
+            if (gap_pct > 0) overageCount[name] = (overageCount[name]||0)+1;
+          }
+        });
+      });
+    });
+    const chronic = Object.entries(overageCount).filter(([k,v])=>v>=3).sort((a,b)=>b[1]-a[1]);
+    if (chronic.length) {
+      let html = '<tr><th>설비</th><th>최근 7일 중 목표초과 횟수</th></tr>';
+      chronic.forEach(([name,cnt])=>{
+        html += `<tr><td>${name}</td><td>${cnt}일</td></tr>`;
+      });
+      chronicTable.innerHTML = html;
+    } else {
+      chronicTable.innerHTML = '<tr><td style="color:var(--muted); font-size:13px;">최근 7일간 3회 이상 목표를 초과한 설비가 없습니다.</td></tr>';
+    }
   }
 
   // ---- 콜밀(Co/M) 설비별 사용량 추이 ----
