@@ -79,6 +79,8 @@ def parse_file(path: Path):
                 gap_candidates.append((m, gap, gap_pct))
 
         gap_candidates.sort(key=lambda x: -x[2])
+        # 목표를 실제로 초과한 설비만 후보로 남긴다 (미달 설비를 초과로 오분류하는 버그 수정)
+        over_candidates = [c for c in gap_candidates if c[2] > 0]
 
         groups_out[gkey] = {
             "label": ginfo["label"],
@@ -87,7 +89,8 @@ def parse_file(path: Path):
             "원단위": round(usage / prod, 2) if prod else None,
             "전력비용": round(cost, 0),
             "설비": equip_detail,
-            "최대목표초과설비": {"설비": gap_candidates[0][0], "목표대비차이": round(gap_candidates[0][1],2), "목표대비율": round(gap_candidates[0][2],1)} if gap_candidates else None,
+            "최대목표초과설비": {"설비": over_candidates[0][0], "목표대비차이": round(over_candidates[0][1],2), "목표대비율": round(over_candidates[0][2],1)} if over_candidates else None,
+            "목표초과설비목록": [{"설비": c[0], "목표대비차이": round(c[1],2), "목표대비율": round(c[2],1)} for c in over_candidates],
         }
 
     extra = {name: round(equip.get(name, {}).get("사용량", 0), 0) for name in EXTRA_ITEMS if name in equip}
