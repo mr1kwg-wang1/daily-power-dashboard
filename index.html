@@ -157,9 +157,10 @@
 </footer>
 
 <script>
-const GROUP_LABELS = {R:"R/M(원료분쇄)", Co:"Co/M(석탄분쇄)", K:"K/L(소성)", C:"C/M(시멘트분쇄)"};
-const GROUP_COLORS = {R:"#e08a3c", Co:"#c9564a", K:"#4c8daa", C:"#5fa876"};
+const GROUP_LABELS = {QR:"Crusher(원료수급)", R:"R/M(원료분쇄)", Co:"Co/M(석탄분쇄)", K:"K/L(소성)", C:"C/M(시멘트분쇄)"};
+const GROUP_COLORS = {QR:"#a685e2", R:"#e08a3c", Co:"#c9564a", K:"#4c8daa", C:"#5fa876"};
 const CORE_GROUP_KEYS = ["R","Co","K","C"];
+const UNIT_CHART_KEYS = ["QR","R","Co","K","C"];
 
 fetch('daily_data.json?_=' + Date.now())
   .then(r => r.json())
@@ -395,7 +396,7 @@ function render(days){
 
   new Chart(document.getElementById('unitChart'), {
     type:'line',
-    data:{ labels, datasets: CORE_GROUP_KEYS.map(k=>({
+    data:{ labels, datasets: UNIT_CHART_KEYS.map(k=>({
       label: GROUP_LABELS[k], data: days.map(d=>d.groups[k]?.원단위 ?? null),
       borderColor: GROUP_COLORS[k], backgroundColor:'transparent', borderWidth:2, pointRadius:3, tension:0.25
     }))},
