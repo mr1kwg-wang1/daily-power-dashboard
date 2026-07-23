@@ -121,9 +121,7 @@
     <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
     <div class="card">
       <table id="dayTypeTable"></table>
-      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
-        ※ 토·일 표본이 아직 2일씩으로 적어, 데이터가 더 쌓일수록 신뢰도가 높아집니다.
-      </div>
+      <div id="dayTypeNote" style="margin-top:8px; font-size:11px; color:var(--muted);"></div>
     </div>
   </section>
 
@@ -213,7 +211,7 @@ function render(days){
       const pv = prev.groups[k]?.원단위;
       if (cur!=null && pv!=null && pv!==0) {
         const pct = (cur-pv)/pv*100;
-        changes.push({k, pct, dir: pct>0?'상승':'하락'});
+        changes.push({k, pct, dir: pct>0?'상승':(pct<0?'하락':'보합')});
       }
     });
     changes.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
@@ -354,6 +352,12 @@ function render(days){
     dtHtml += `<tr><td style="text-align:left">${r.t}</td><td>${r.n}일</td><td>${fmt(r.usage)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.price,1)}</td></tr>`;
   });
   dayTypeTable.innerHTML = dtHtml;
+  const dayTypeNoteEl = document.getElementById('dayTypeNote');
+  if (dayTypeNoteEl) {
+    const satN = dtRows.find(r=>r.t==='토요일')?.n ?? 0;
+    const sunN = dtRows.find(r=>r.t==='일요일')?.n ?? 0;
+    dayTypeNoteEl.textContent = `※ 토요일 표본 ${satN}일, 일요일 표본 ${sunN}일 — 데이터가 더 쌓일수록 신뢰도가 높아집니다.`;
+  }
 
   // ---- 톤당 전력비 / 평균단가 추이 ----
   new Chart(document.getElementById('costPerTonChart'), {
