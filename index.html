@@ -152,7 +152,7 @@
   </section>
 
   <section>
-    <h2>절감 예상 시나리오 (최대부하 비중 축소)</h2>
+    <h2>절감 예상 시나리오 1 (최대부하 비중 축소)</h2>
     <div class="card">
       <div id="savingsStats" style="font-size:12px; color:var(--muted); margin-bottom:14px;"></div>
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
@@ -171,18 +171,23 @@
   </section>
 
   <section>
-    <h2>절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이동)</h2>
+    <h2>절감 예상 시나리오 2 (평일 최대부하 1시간 &rarr; 토&middot;일 이전)</h2>
     <div class="card">
-      <div style="font-size:12px; color:var(--muted); margin-bottom:14px;" id="shiftStats"></div>
+      <div id="shiftStats" style="font-size:12px; color:var(--muted); margin-bottom:14px;"></div>
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
-        <label for="outageRateSlider" style="font-size:13px; color:var(--text); white-space:nowrap;">돌발 운휴 등으로 인한 실현율</label>
-        <input type="range" id="outageRateSlider" min="40" max="100" value="100" step="5" style="flex:1; min-width:160px;">
-        <span id="outageRateValue" style="font-size:13px; font-weight:700; color:var(--accent); min-width:44px;">100%</span>
+        <label for="shiftHoursSlider" style="font-size:13px; color:var(--text); white-space:nowrap;">평일 1일당 이전 시간</label>
+        <input type="range" id="shiftHoursSlider" min="0.5" max="4" value="1" step="0.5" style="flex:1; min-width:160px;">
+        <span id="shiftHoursValue" style="font-size:13px; font-weight:700; color:var(--accent); min-width:44px;">1시간</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+        <label for="shiftAvailSlider" style="font-size:13px; color:var(--text); white-space:nowrap;">가동률(운휴&middot;돌발정지 감안)</label>
+        <input type="range" id="shiftAvailSlider" min="50" max="100" value="90" step="5" style="flex:1; min-width:160px;">
+        <span id="shiftAvailValue" style="font-size:13px; font-weight:700; color:var(--accent); min-width:44px;">90%</span>
       </div>
       <div class="savings-grid">
-        <div class="kpi"><div class="label">주간 절감액</div><div class="value" id="shiftWeekSaving">-</div></div>
-        <div class="kpi"><div class="label">예상 월간 절감액</div><div class="value" id="shiftMonthSaving">-</div></div>
-        <div class="kpi"><div class="label">예상 연간 절감액</div><div class="value" id="shiftYearSaving">-</div></div>
+        <div class="kpi"><div class="label">토요일로만 이전 시 (연간)</div><div class="value" id="shiftSavingSat">-</div></div>
+        <div class="kpi"><div class="label">일요일로만 이전 시 (연간)</div><div class="value" id="shiftSavingSun">-</div></div>
+        <div class="kpi"><div class="label">토&middot;일 균등분배 시 (연간)</div><div class="value" id="shiftSavingSplit">-</div></div>
       </div>
       <div style="margin-top:8px; font-size:11px; color:var(--muted);" id="shiftNote"></div>
     </div>
@@ -495,8 +500,10 @@ function render(days){
 
   // ---- 절감 예상 시나리오 (최대부하 비중 축소) ----
   (function(){
-    const pts = days.filter(d => d.tou?.최대부하_비중 != null && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
-                     .map(d => ({x: d.tou.최대부하_비중, y: d.avg_price_per_kwh, usage: d.total_usage_main4}));
+    const allPts = days.filter(d => d.tou?.최대부하_비중 != null && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
+                     .map(d => { const w = new Date(d.date + 'T00:00:00').getDay(); return {x: d.tou.최대부하_비중, y: d.avg_price_per_kwh, usage: d.total_usage_main4, isWeekday: (w>=1 && w<=5)}; });
+    const pts = allPts.filter(p => p.isWeekday);
+    const weekendPts = allPts.filter(p => !p.isWeekday);
     const statsEl = document.getElementById('savingsStats');
     const noteEl = document.getElementById('savingsNote');
     if (pts.length < 5) {
@@ -518,14 +525,16 @@ function render(days){
     const avgPeakShare = sumX / n;
     const avgPrice = sumY / n;
     const avgUsage = pts.reduce((s,p)=>s+p.usage,0) / n;
+    const minPeak = Math.min(...pts.map(p=>p.x));
+    const maxPeak = Math.max(...pts.map(p=>p.x));
 
     if (statsEl) {
-      statsEl.innerHTML = `최근 <b>${n}일</b> 데이터 기준 · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b> · 평균 단가 <b>${fmt(avgPrice,1)}원/kWh</b> · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b> · 상관도(R²) <b>${fmt(r2*100,0)}%</b>`;
+      statsEl.innerHTML = `평일 <b>${n}일</b> 데이터 기준(주말 ${weekendPts.length}일은 요금제상 최대부하가 구조적으로 0%가 되어 회귀분석에서 제외) · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b>(관측범위 ${fmt(minPeak,1)}~${fmt(maxPeak,1)}%) · 평균 단가 <b>${fmt(avgPrice,1)}원/kWh</b> · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b> · 상관도(R²) <b>${fmt(r2*100,0)}%</b>`;
     }
 
     const slider = document.getElementById('peakReduceSlider');
     const sliderValueEl = document.getElementById('peakReduceValue');
-    const maxReduce = Math.max(1, Math.floor(avgPeakShare));
+    const maxReduce = Math.max(1, Math.floor(avgPeakShare - minPeak));
     if (slider) { slider.max = maxReduce; if (Number(slider.value) > maxReduce) slider.value = maxReduce; }
 
     function update() {
@@ -549,7 +558,7 @@ function render(days){
 
     if (noteEl) {
       const validity = b > 0 ? '' : ' (주의: 현재 데이터에서는 최대부하 비중과 단가 간 뚜렷한 양의 상관관계가 확인되지 않아 추정치의 신뢰도가 낮습니다.)';
-      noteEl.textContent = `※ 이 추정치는 최근 ${n}일간 실제 데이터에서 "최대부하 비중"과 "평균 단가"의 상관관계(선형회귀)를 근거로 한 근사치이며, 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.${validity}`;
+      noteEl.textContent = `※ 이 추정치는 최근 ${n}일간 평일 데이터(주말은 요금제상 최대부하가 구조적으로 0%가 되어 상관관계를 왜곡하므로 회귀분석에서 제외)에서 "최대부하 비중"과 "평균 단가"의 상관관계(선형회귀, R² ${fmt(r2*100,0)}%)를 근거로 한 근사치입니다. 관측된 평일 최대부하 비중 범위(${fmt(minPeak,1)}~${fmt(maxPeak,1)}%)를 벗어나는 감소폭은 외삽 오차가 커질 수 있어 슬라이더 최대값을 이 범위 내로 제한했습니다. 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.${validity}`;
     }
 
     const xs = pts.map(p=>p.x);
@@ -558,8 +567,9 @@ function render(days){
       type: 'scatter',
       data: {
         datasets: [
-          { label: '일별 데이터', data: pts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#e08a3c', pointRadius:4 },
-          { label: '추세선', data: [{x:minX, y:a+b*minX},{x:maxX, y:a+b*maxX}], type:'line', borderColor:'#4c8daa', borderWidth:2, pointRadius:0, fill:false, showLine:true }
+          { label: '평일 데이터(회귀 반영)', data: pts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#e08a3c', pointRadius:4 },
+          { label: '주말 데이터(회귀 제외)', data: weekendPts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#5a6470', pointRadius:3 },
+          { label: '추세선(평일 기준)', data: [{x:minX, y:a+b*minX},{x:maxX, y:a+b*maxX}], type:'line', borderColor:'#4c8daa', borderWidth:2, pointRadius:0, fill:false, showLine:true }
         ]
       },
       options: {
@@ -573,64 +583,85 @@ function render(days){
     });
   })();
 
-  // ---- 절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이동) ----
   (function(){
-    const statsEl = document.getElementById('shiftStats');
-    const noteEl = document.getElementById('shiftNote');
+    const pts2 = days.filter(d => d.tou && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
+      .map(d => {
+        const dt = new Date(d.date + 'T00:00:00');
+        const w = dt.getDay();
+        return { mid: d.tou.중간부하_비중, peak: d.tou.최대부하_비중, off: d.tou.경부하_비중, price: d.avg_price_per_kwh, usage: d.total_usage_main4, isWeekday: (w>=1 && w<=5) };
+      });
+    const statsEl2 = document.getElementById('shiftStats');
+    const noteEl2 = document.getElementById('shiftNote');
+    if (pts2.length < 7) { if (statsEl2) statsEl2.textContent = '데이터가 충분하지 않습니다 (7일 이상 필요).'; return; }
+    const n2 = pts2.length;
+    const sum = arr => arr.reduce((s,v)=>s+v,0);
+    const X1 = pts2.map(p=>p.mid/100), X2 = pts2.map(p=>p.peak/100), Y2 = pts2.map(p=>p.price);
+    const s1=sum(X1), s2=sum(X2), sy=sum(Y2);
+    const s11=sum(X1.map(x=>x*x)), s22=sum(X2.map(x=>x*x)), s12=sum(X1.map((x,i)=>x*X2[i]));
+    const s1y=sum(X1.map((x,i)=>x*Y2[i])), s2y=sum(X2.map((x,i)=>x*Y2[i]));
+    function det3(m){ return m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1]) - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0]) + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]); }
+    const Amat = [[n2,s1,s2],[s1,s11,s12],[s2,s12,s22]];
+    function repl(col,b){ const M=Amat.map(r=>r.slice()); for(let i=0;i<3;i++) M[i][col]=b[i]; return M; }
+    const bvec=[sy,s1y,s2y];
+    const D = det3(Amat);
+    const a2 = det3(repl(0,bvec))/D;
+    const b1 = det3(repl(1,bvec))/D;
+    const b2 = det3(repl(2,bvec))/D;
+    const meanY2 = sy/n2;
+    const pred2 = pts2.map((p,i)=> a2 + b1*X1[i] + b2*X2[i]);
+    const ssTot2 = sum(Y2.map(y=>(y-meanY2)**2));
+    const ssRes2 = sum(Y2.map((y,i)=>(y-pred2[i])**2));
+    const r2b = ssTot2 !== 0 ? 1 - ssRes2/ssTot2 : 0;
+    const pOff = a2, pMid = a2 + b1, pPeak = a2 + b2;
 
-    function groupStats(list) {
-      const n = list.length;
-      if (!n) return null;
-      const avgUsage = list.reduce((s,d)=>s+(d.total_usage_main4||0),0) / n;
-      const avgPrice = list.reduce((s,d)=>s+(d.avg_price_per_kwh||0),0) / n;
-      return {n, avgUsage, avgPrice};
+    const weekdayPts = pts2.filter(p=>p.isWeekday);
+    const avgWeekdayUsage = weekdayPts.length ? sum(weekdayPts.map(p=>p.usage))/weekdayPts.length : 0;
+    const hourlyUsage = avgWeekdayUsage / 24;
+
+    if (statsEl2) {
+      statsEl2.innerHTML = `최근 ${n2}일 데이터 기준(회귀분석, R² ${fmt(r2b*100,0)}%) &middot; 내재단가 추정 &mdash; 경부하 <b>${fmt(pOff,1)}원/kWh</b> &middot; 중간부하 <b>${fmt(pMid,1)}원/kWh</b> &middot; 최대부하 <b>${fmt(pPeak,1)}원/kWh</b> &middot; 평일 시간당 평균사용량 <b>${fmt(hourlyUsage,0)}kWh</b>`;
     }
-    const wd = groupStats(days.filter(d=>d.day_type==='평일'));
-    const sat = groupStats(days.filter(d=>d.day_type==='토요일'));
-    const sun = groupStats(days.filter(d=>d.day_type==='일요일'));
 
-    if (!wd || !sat || !sun) {
-      if (statsEl) statsEl.textContent = '평일/토요일/일요일 데이터가 모두 갖춰져야 계산할 수 있습니다.';
-      return;
-    }
+    const weekdaysPerYear = 5 * 52; // 평일 5일 × 52주 기준(연 260일)
 
-    // "1시간"은 시간대별 실사용량 데이터가 없어 하루 사용량/24로 균등 추정한다 (보수적 하한치 —
-    // 실제 최대부하 시간대 사용량은 하루 평균보다 많을 가능성이 높아 실제 절감액은 이보다 클 수 있음).
-    const hourlyUsageWeekday = wd.avgUsage / 24;
-    const weeklyShiftedUsage = hourlyUsageWeekday * 5; // 평일 5일 x 1시간
-    const costIfStayed = weeklyShiftedUsage * wd.avgPrice;
-    const costIfMoved = (weeklyShiftedUsage/2) * sat.avgPrice + (weeklyShiftedUsage/2) * sun.avgPrice;
-    const baseWeeklySaving = costIfStayed - costIfMoved;
+    const slider2 = document.getElementById('shiftHoursSlider');
+    const sliderValueEl2 = document.getElementById('shiftHoursValue');
+    const availSlider = document.getElementById('shiftAvailSlider');
+    const availValueEl = document.getElementById('shiftAvailValue');
 
-    if (statsEl) {
-      statsEl.innerHTML = `평일 <b>${wd.n}일</b> 평균단가 <b>${fmt(wd.avgPrice,1)}원/kWh</b> · 토요일 평균단가 <b>${fmt(sat.avgPrice,1)}원/kWh</b> · 일요일 평균단가 <b>${fmt(sun.avgPrice,1)}원/kWh</b> · 주간 이동 추정량 <b>${fmt(weeklyShiftedUsage,0)}kWh</b>`;
-    }
-
-    const slider = document.getElementById('outageRateSlider');
-    const sliderValueEl = document.getElementById('outageRateValue');
-
-    function update() {
-      const rate = Number(slider ? slider.value : 100);
-      if (sliderValueEl) sliderValueEl.textContent = rate + '%';
-      const weeklySaving = baseWeeklySaving * rate/100;
-      const monthlySaving = weeklySaving * (30/7);
-      const yearlySaving = weeklySaving * 52;
+    function update2() {
+      const hoursPerWeekday = Number(slider2 ? slider2.value : 1);
+      if (sliderValueEl2) sliderValueEl2.textContent = hoursPerWeekday + '시간';
+      const availability = Number(availSlider ? availSlider.value : 90) / 100;
+      if (availValueEl) availValueEl.textContent = Math.round(availability*100) + '%';
+      const shiftedKwhPerDay = hourlyUsage * hoursPerWeekday;
+      const currentCostPerDay = shiftedKwhPerDay * pPeak;
+      const satCostPerDay = shiftedKwhPerDay * pMid;
+      const sunCostPerDay = shiftedKwhPerDay * pOff;
+      const dailySavingSat = currentCostPerDay - satCostPerDay;
+      const dailySavingSun = currentCostPerDay - sunCostPerDay;
+      const dailySavingSplit = (dailySavingSat + dailySavingSun) / 2;
+      const annualToSat = dailySavingSat * weekdaysPerYear * availability;
+      const annualToSun = dailySavingSun * weekdaysPerYear * availability;
+      const annualSplit = dailySavingSplit * weekdaysPerYear * availability;
       const wonFmt = (v) => (v>=0?'':'-') + Math.abs(Math.round(v)).toLocaleString('ko-KR') + '원';
-      const weekEl = document.getElementById('shiftWeekSaving');
-      const monthEl = document.getElementById('shiftMonthSaving');
-      const yearEl = document.getElementById('shiftYearSaving');
-      if (weekEl) weekEl.textContent = wonFmt(weeklySaving);
-      if (monthEl) monthEl.textContent = wonFmt(monthlySaving);
-      if (yearEl) yearEl.textContent = wonFmt(yearlySaving);
+      const satEl = document.getElementById('shiftSavingSat');
+      const sunEl = document.getElementById('shiftSavingSun');
+      const splitEl = document.getElementById('shiftSavingSplit');
+      if (satEl) satEl.textContent = wonFmt(annualToSat);
+      if (sunEl) sunEl.textContent = wonFmt(annualToSun);
+      if (splitEl) splitEl.textContent = wonFmt(annualSplit);
     }
-    if (slider) slider.addEventListener('input', update);
-    update();
+    if (slider2) slider2.addEventListener('input', update2);
+    if (availSlider) availSlider.addEventListener('input', update2);
+    update2();
 
-    if (noteEl) {
-      noteEl.textContent = `※ 시간대별 실사용량 데이터가 없어 "1시간"을 하루 총사용량/24로 균등 추정한 보수적 하한치입니다(실제 최대부하 시간대는 일평균보다 사용량이 많을 수 있어 실제 절감액은 더 클 수 있음). 평일 5일×1시간을 토요일/일요일에 절반씩(2.5시간) 이동하는 것으로 가정했고, 요금은 각 요일 유형의 평균단가를 적용했습니다. 계약종별 실제 경부하/중간부하/최대부하 단가표가 있으면 더 정확한 추정이 가능합니다. "실현율" 슬라이더는 돌발 운휴·설비고장 등으로 계획한 이동이 매주 100% 실행되지 못하는 상황을 반영합니다.`;
+    if (noteEl2) {
+      noteEl2.textContent = `※ 밴드별 단가(경부하/중간부하/최대부하)는 실제 계약단가가 아니라, 최근 ${n2}일간 일평균단가와 시간대별 사용비중(TOU 비중) 데이터를 회귀분석하여 역산한 추정치입니다. 이 회귀분석은 시나리오 1과 달리 주말 데이터를 포함해야 세 밴드 단가가 안정적으로 식별됩니다 — 평일 데이터만으로는 중간부하·최대부하 비중이 함께 움직여(다중공선성) 추정치가 불안정해짐을 확인했습니다. 시간당 사용량은 평일 일평균사용량÷24로 근사했으며(실제 시간대별 부하곡선과 다를 수 있음), 토요일 이전분은 중간부하 단가, 일요일 이전분은 경부하 단가(토·일 모두 최대부하 미적용 확인됨)로 가정했습니다. 연간 절감액은 평일 5일×52주(연 260일) 기준에 가동률(운휴·돌발정지 감안, 기본 90%)을 곱해 산정한 추정치이며, 가동률은 실제 정지 이력 통계가 아닌 조정 가능한 가정치이므로 현장 실제값으로 조정해 사용하시기 바랍니다. 연속공정 특성상 실제 이전 가능 여부는 별도 현장 검토가 필요합니다.`;
     }
   })();
 }
 </script>
 </body>
 </html>
+
