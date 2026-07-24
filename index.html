@@ -169,6 +169,24 @@
       <div style="margin-top:8px; font-size:11px; color:var(--muted);" id="savingsNote"></div>
     </div>
   </section>
+
+  <section>
+    <h2>절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이동)</h2>
+    <div class="card">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:14px;" id="shiftStats"></div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+        <label for="outageRateSlider" style="font-size:13px; color:var(--text); white-space:nowrap;">돌발 운휴 등으로 인한 실현율</label>
+        <input type="range" id="outageRateSlider" min="40" max="100" value="100" step="5" style="flex:1; min-width:160px;">
+        <span id="outageRateValue" style="font-size:13px; font-weight:700; color:var(--accent); min-width:44px;">100%</span>
+      </div>
+      <div class="savings-grid">
+        <div class="kpi"><div class="label">주간 절감액</div><div class="value" id="shiftWeekSaving">-</div></div>
+        <div class="kpi"><div class="label">예상 월간 절감액</div><div class="value" id="shiftMonthSaving">-</div></div>
+        <div class="kpi"><div class="label">예상 연간 절감액</div><div class="value" id="shiftYearSaving">-</div></div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);" id="shiftNote"></div>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -553,6 +571,64 @@ function render(days){
         }
       }
     });
+  })();
+
+  // ---- 절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이동) ----
+  (function(){
+    const statsEl = document.getElementById('shiftStats');
+    const noteEl = document.getElementById('shiftNote');
+
+    function groupStats(list) {
+      const n = list.length;
+      if (!n) return null;
+      const avgUsage = list.reduce((s,d)=>s+(d.total_usage_main4||0),0) / n;
+      const avgPrice = list.reduce((s,d)=>s+(d.avg_price_per_kwh||0),0) / n;
+      return {n, avgUsage, avgPrice};
+    }
+    const wd = groupStats(days.filter(d=>d.day_type==='평일'));
+    const sat = groupStats(days.filter(d=>d.day_type==='토요일'));
+    const sun = groupStats(days.filter(d=>d.day_type==='일요일'));
+
+    if (!wd || !sat || !sun) {
+      if (statsEl) statsEl.textContent = '평일/토요일/일요일 데이터가 모두 갖춰져야 계산할 수 있습니다.';
+      return;
+    }
+
+    // "1시간"은 시간대별 실사용량 데이터가 없어 하루 사용량/24로 균등 추정한다 (보수적 하한치 —
+    // 실제 최대부하 시간대 사용량은 하루 평균보다 많을 가능성이 높아 실제 절감액은 이보다 클 수 있음).
+    const hourlyUsageWeekday = wd.avgUsage / 24;
+    const weeklyShiftedUsage = hourlyUsageWeekday * 5; // 평일 5일 x 1시간
+    const costIfStayed = weeklyShiftedUsage * wd.avgPrice;
+    const costIfMoved = (weeklyShiftedUsage/2) * sat.avgPrice + (weeklyShiftedUsage/2) * sun.avgPrice;
+    const baseWeeklySaving = costIfStayed - costIfMoved;
+
+    if (statsEl) {
+      statsEl.innerHTML = `평일 <b>${wd.n}일</b> 평균단가 <b>${fmt(wd.avgPrice,1)}원/kWh</b> · 토요일 평균단가 <b>${fmt(sat.avgPrice,1)}원/kWh</b> · 일요일 평균단가 <b>${fmt(sun.avgPrice,1)}원/kWh</b> · 주간 이동 추정량 <b>${fmt(weeklyShiftedUsage,0)}kWh</b>`;
+    }
+
+    const slider = document.getElementById('outageRateSlider');
+    const sliderValueEl = document.getElementById('outageRateValue');
+
+    function update() {
+      const rate = Number(slider ? slider.value : 100);
+      if (sliderValueEl) sliderValueEl.textContent = rate + '%';
+      const weeklySaving = baseWeeklySaving * rate/100;
+      const monthlySaving = weeklySaving * (30/7);
+      const yearlySaving = weeklySaving * 52;
+      const wonFmt = (v) => (v>=0?'':'-') + Math.abs(Math.round(v)).toLocaleString('ko-KR') + '원';
+      const weekEl = document.getElementById('shiftWeekSaving');
+      const monthEl = document.getElementById('shiftMonthSaving');
+      const yearEl = document.getElementById('shiftYearSaving');
+      if (weekEl) weekEl.textContent = wonFmt(weeklySaving);
+      if (monthEl) monthEl.textContent = wonFmt(monthlySaving);
+      if (yearEl) yearEl.textContent = wonFmt(yearlySaving);
+    }
+    if (slider) slider.addEventListener('input', update);
+    update();
+
+    if (noteEl) {
+      noteEl.textContent = `※ 시간대별 실사용량 데이터가 없어 "1시간"을 하루 총사용량/24로 균등 추정한 보수적 하한치입니다(실제 최대부하 시간대는 일평균보다 사용량이 많을 수 있어 실제 절감액은 더 클 수 있음). 평일 5일×1시간을 토요일/일요일에 절반씩(2.5시간) 이동하는 것으로 가정했고, 요금은 각 요일 유형의 평균단가를 적용했습니다. 계약종별 실제 경부하/중간부하/최대부하 단가표가 있으면 더 정확한 추정이 가능합니다. "실현율" 슬라이더는 돌발 운휴·설비고장 등으로 계획한 이동이 매주 100% 실행되지 못하는 상황을 반영합니다.`;
+    }
   })();
 }
 </script>
