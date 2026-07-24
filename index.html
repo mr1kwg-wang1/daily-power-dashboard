@@ -29,6 +29,8 @@
   .kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px;}
   .kpi-row .kpi:nth-child(1){grid-column:span 3;}
   .kpi-row .kpi:nth-child(2){grid-column:span 2;}
+  .savings-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:14px 0;}
+  @media(max-width:820px){.savings-grid{grid-template-columns:1fr;}}
   @media(max-width:820px){.kpi-row{grid-template-columns:repeat(2,1fr);} .kpi-row .kpi:nth-child(1),.kpi-row .kpi:nth-child(2){grid-column:span 1;}}
   .kpi{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px;}
   .kpi .label{font-size:12px; color:var(--muted); margin-bottom:6px;}
@@ -146,6 +148,25 @@
     <h2>일별 상세 데이터</h2>
     <div class="card" style="overflow-x:auto;">
       <table id="detailTable"></table>
+    </div>
+  </section>
+
+  <section>
+    <h2>절감 예상 시나리오 (최대부하 비중 축소)</h2>
+    <div class="card">
+      <div id="savingsStats" style="font-size:12px; color:var(--muted); margin-bottom:14px;"></div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+        <label for="peakReduceSlider" style="font-size:13px; color:var(--text); white-space:nowrap;">최대부하 비중 감소 목표</label>
+        <input type="range" id="peakReduceSlider" min="0" max="30" value="10" step="1" style="flex:1; min-width:160px;">
+        <span id="peakReduceValue" style="font-size:13px; font-weight:700; color:var(--accent); min-width:44px;">10%p</span>
+      </div>
+      <div class="savings-grid">
+        <div class="kpi"><div class="label">예상 단가 절감</div><div class="value" id="savingPrice">-</div></div>
+        <div class="kpi"><div class="label">예상 월간 절감액</div><div class="value" id="savingMonth">-</div></div>
+        <div class="kpi"><div class="label">예상 연간 절감액</div><div class="value" id="savingYear">-</div></div>
+      </div>
+      <div class="chart-wrap" style="margin-top:16px;"><canvas id="savingsChart" role="img" aria-label="최대부하 비중과 평균단가 상관관계"></canvas></div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);" id="savingsNote"></div>
     </div>
   </section>
 </main>
@@ -453,6 +474,86 @@ function render(days){
   </tr>`;
 
   table.innerHTML = head + rows + avgRow;
+
+  // ---- 절감 예상 시나리오 (최대부하 비중 축소) ----
+  (function(){
+    const pts = days.filter(d => d.tou?.최대부하_비중 != null && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
+                     .map(d => ({x: d.tou.최대부하_비중, y: d.avg_price_per_kwh, usage: d.total_usage_main4}));
+    const statsEl = document.getElementById('savingsStats');
+    const noteEl = document.getElementById('savingsNote');
+    if (pts.length < 5) {
+      if (statsEl) statsEl.textContent = '데이터가 충분하지 않습니다 (5일 이상 필요).';
+      return;
+    }
+    const n = pts.length;
+    const sumX = pts.reduce((s,p)=>s+p.x,0);
+    const sumY = pts.reduce((s,p)=>s+p.y,0);
+    const sumXY = pts.reduce((s,p)=>s+p.x*p.y,0);
+    const sumXX = pts.reduce((s,p)=>s+p.x*p.x,0);
+    const denom = (n*sumXX - sumX*sumX);
+    const b = denom !== 0 ? (n*sumXY - sumX*sumY) / denom : 0;
+    const a = (sumY - b*sumX) / n;
+    const meanY = sumY / n;
+    const ssTot = pts.reduce((s,p)=>s+(p.y-meanY)**2, 0);
+    const ssRes = pts.reduce((s,p)=>{ const pred = a + b*p.x; return s + (p.y-pred)**2; }, 0);
+    const r2 = ssTot !== 0 ? 1 - ssRes/ssTot : 0;
+    const avgPeakShare = sumX / n;
+    const avgPrice = sumY / n;
+    const avgUsage = pts.reduce((s,p)=>s+p.usage,0) / n;
+
+    if (statsEl) {
+      statsEl.innerHTML = `최근 <b>${n}일</b> 데이터 기준 · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b> · 평균 단가 <b>${fmt(avgPrice,1)}원/kWh</b> · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b> · 상관도(R²) <b>${fmt(r2*100,0)}%</b>`;
+    }
+
+    const slider = document.getElementById('peakReduceSlider');
+    const sliderValueEl = document.getElementById('peakReduceValue');
+    const maxReduce = Math.max(1, Math.floor(avgPeakShare));
+    if (slider) { slider.max = maxReduce; if (Number(slider.value) > maxReduce) slider.value = maxReduce; }
+
+    function update() {
+      const delta = Number(slider ? slider.value : 10);
+      if (sliderValueEl) sliderValueEl.textContent = delta + '%p';
+      const priceSaving = b * delta;
+      const dailySaving = priceSaving * avgUsage;
+      const monthlySaving = dailySaving * 30;
+      const yearlySaving = dailySaving * 365;
+      const wonFmt = (v) => (v>=0?'':'-') + Math.abs(Math.round(v)).toLocaleString('ko-KR') + '원';
+      const kwhFmt = (v) => (v>=0?'':'-') + Math.abs(v).toFixed(1) + '원/kWh';
+      const priceSavingEl = document.getElementById('savingPrice');
+      const monthEl = document.getElementById('savingMonth');
+      const yearEl = document.getElementById('savingYear');
+      if (priceSavingEl) priceSavingEl.textContent = kwhFmt(priceSaving);
+      if (monthEl) monthEl.textContent = wonFmt(monthlySaving);
+      if (yearEl) yearEl.textContent = wonFmt(yearlySaving);
+    }
+    if (slider) slider.addEventListener('input', update);
+    update();
+
+    if (noteEl) {
+      const validity = b > 0 ? '' : ' (주의: 현재 데이터에서는 최대부하 비중과 단가 간 뚜렷한 양의 상관관계가 확인되지 않아 추정치의 신뢰도가 낮습니다.)';
+      noteEl.textContent = `※ 이 추정치는 최근 ${n}일간 실제 데이터에서 "최대부하 비중"과 "평균 단가"의 상관관계(선형회귀)를 근거로 한 근사치이며, 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.${validity}`;
+    }
+
+    const xs = pts.map(p=>p.x);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    new Chart(document.getElementById('savingsChart'), {
+      type: 'scatter',
+      data: {
+        datasets: [
+          { label: '일별 데이터', data: pts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#e08a3c', pointRadius:4 },
+          { label: '추세선', data: [{x:minX, y:a+b*minX},{x:maxX, y:a+b*maxX}], type:'line', borderColor:'#4c8daa', borderWidth:2, pointRadius:0, fill:false, showLine:true }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} } },
+        scales:{
+          x:{ title:{display:true, text:'최대부하 비중 (%)', color:'#8a95a1'}, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} },
+          y:{ title:{display:true, text:'평균 단가 (원/kWh)', color:'#8a95a1'}, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} }
+        }
+      }
+    });
+  })();
 }
 </script>
 </body>
