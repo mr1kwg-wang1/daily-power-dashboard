@@ -500,8 +500,10 @@ function render(days){
 
   // ---- 절감 예상 시나리오 (최대부하 비중 축소) ----
   (function(){
-    const pts = days.filter(d => d.tou?.최대부하_비중 != null && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
-                     .map(d => ({x: d.tou.최대부하_비중, y: d.avg_price_per_kwh, usage: d.total_usage_main4}));
+    const allPts = days.filter(d => d.tou?.최대부하_비중 != null && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
+                     .map(d => { const w = new Date(d.date + 'T00:00:00').getDay(); return {x: d.tou.최대부하_비중, y: d.avg_price_per_kwh, usage: d.total_usage_main4, isWeekday: (w>=1 && w<=5)}; });
+    const pts = allPts.filter(p => p.isWeekday);
+    const weekendPts = allPts.filter(p => !p.isWeekday);
     const statsEl = document.getElementById('savingsStats');
     const noteEl = document.getElementById('savingsNote');
     if (pts.length < 5) {
@@ -523,14 +525,16 @@ function render(days){
     const avgPeakShare = sumX / n;
     const avgPrice = sumY / n;
     const avgUsage = pts.reduce((s,p)=>s+p.usage,0) / n;
+    const minPeak = Math.min(...pts.map(p=>p.x));
+    const maxPeak = Math.max(...pts.map(p=>p.x));
 
     if (statsEl) {
-      statsEl.innerHTML = `최근 <b>${n}일</b> 데이터 기준 · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b> · 평균 단가 <b>${fmt(avgPrice,1)}원/kWh</b> · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b> · 상관도(R²) <b>${fmt(r2*100,0)}%</b>`;
+      statsEl.innerHTML = `평일 <b>${n}일</b> 데이터 기준(주말 ${weekendPts.length}일은 요금제상 최대부하가 구조적으로 0%가 되어 회귀분석에서 제외) · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b>(관측범위 ${fmt(minPeak,1)}~${fmt(maxPeak,1)}%) · 평균 단가 <b>${fmt(avgPrice,1)}원/kWh</b> · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b> · 상관도(R²) <b>${fmt(r2*100,0)}%</b>`;
     }
 
     const slider = document.getElementById('peakReduceSlider');
     const sliderValueEl = document.getElementById('peakReduceValue');
-    const maxReduce = Math.max(1, Math.floor(avgPeakShare));
+    const maxReduce = Math.max(1, Math.floor(avgPeakShare - minPeak));
     if (slider) { slider.max = maxReduce; if (Number(slider.value) > maxReduce) slider.value = maxReduce; }
 
     function update() {
@@ -554,7 +558,7 @@ function render(days){
 
     if (noteEl) {
       const validity = b > 0 ? '' : ' (주의: 현재 데이터에서는 최대부하 비중과 단가 간 뚜렷한 양의 상관관계가 확인되지 않아 추정치의 신뢰도가 낮습니다.)';
-      noteEl.textContent = `※ 이 추정치는 최근 ${n}일간 실제 데이터에서 "최대부하 비중"과 "평균 단가"의 상관관계(선형회귀)를 근거로 한 근사치이며, 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.${validity}`;
+      noteEl.textContent = `※ 이 추정치는 최근 ${n}일간 평일 데이터(주말은 요금제상 최대부하가 구조적으로 0%가 되어 상관관계를 왜곡하므로 회귀분석에서 제외)에서 "최대부하 비중"과 "평균 단가"의 상관관계(선형회귀, R² ${fmt(r2*100,0)}%)를 근거로 한 근사치입니다. 관측된 평일 최대부하 비중 범위(${fmt(minPeak,1)}~${fmt(maxPeak,1)}%)를 벗어나는 감소폭은 외삽 오차가 커질 수 있어 슬라이더 최대값을 이 범위 내로 제한했습니다. 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.${validity}`;
     }
 
     const xs = pts.map(p=>p.x);
@@ -563,8 +567,9 @@ function render(days){
       type: 'scatter',
       data: {
         datasets: [
-          { label: '일별 데이터', data: pts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#e08a3c', pointRadius:4 },
-          { label: '추세선', data: [{x:minX, y:a+b*minX},{x:maxX, y:a+b*maxX}], type:'line', borderColor:'#4c8daa', borderWidth:2, pointRadius:0, fill:false, showLine:true }
+          { label: '평일 데이터(회귀 반영)', data: pts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#e08a3c', pointRadius:4 },
+          { label: '주말 데이터(회귀 제외)', data: weekendPts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#5a6470', pointRadius:3 },
+          { label: '추세선(평일 기준)', data: [{x:minX, y:a+b*minX},{x:maxX, y:a+b*maxX}], type:'line', borderColor:'#4c8daa', borderWidth:2, pointRadius:0, fill:false, showLine:true }
         ]
       },
       options: {
