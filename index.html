@@ -65,6 +65,11 @@
   .gap-card{background:linear-gradient(135deg,#2a1e1e,#1c2228); border:1px solid #4a2a2a; border-left:3px solid var(--warn); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start;}
   .gap-card .icon{font-size:16px;}
   .gap-card .body b{color:var(--warn);}
+  .maint-card{background:linear-gradient(135deg,#1c2a24,#1c2228); border:1px solid #2a4a3a; border-left:3px solid var(--ok); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px;}
+  .maint-card .title{font-weight:700; color:var(--ok); margin-bottom:8px; display:flex; align-items:center; gap:6px;}
+  .maint-entry{background:#20262d; border-radius:6px; padding:8px 12px; margin-top:6px; font-size:12px;}
+  .maint-entry .meta{color:var(--accent2); font-weight:600; margin-bottom:3px;}
+  .maint-entry .content{color:var(--text); line-height:1.5;}
   footer{padding:20px 32px; color:var(--muted); font-size:12px; border-top:1px solid var(--line);}
 </style>
 </head>
@@ -81,6 +86,7 @@
   <div class="kpi-row" id="kpiRow"></div>
   <div id="insightBanner"></div>
   <div id="gapCard"></div>
+  <div id="maintenanceCard"></div>
 
   <section>
     <h2>일별 총 사용량 추이 (R+Co+K+C, kWh)</h2>
@@ -206,7 +212,7 @@ const UNIT_CHART_KEYS = ["QR","R","Co","K","C"];
 
 fetch('daily_data.json?_=' + Date.now())
   .then(r => r.json())
-  .then(data => render(data.days))
+  .then(data => render(data.days, data.maintenance_log || []))
   .catch(err => {
     document.getElementById('updatedAt').textContent = '데이터를 불러오지 못했습니다: ' + err;
   });
@@ -214,7 +220,7 @@ fetch('daily_data.json?_=' + Date.now())
 function fmt(n, d=0){ return n==null ? '-' : Number(n).toLocaleString('ko-KR', {maximumFractionDigits:d, minimumFractionDigits:d}); }
 function dateLabel(d){ const [y,mo,da]=d.split('-'); return `${parseInt(mo)}/${parseInt(da)}`; }
 
-function render(days){
+function render(days, maintenanceLog){
   days.sort((a,b)=>a.date.localeCompare(b.date));
   const labels = days.map(d=>dateLabel(d.date));
   document.getElementById('updatedAt').textContent = `최신 데이터: ${days[days.length-1].date} · 총 ${days.length}일 누적`;
@@ -248,8 +254,8 @@ function render(days){
 
   // ---- 인사이트: 전일대비 원단위 변동폭 랭킹 (핵심 4개군 전체) ----
   const insightEl = document.getElementById('insightBanner');
+  const changes = [];
   if (prev) {
-    const changes = [];
     CORE_GROUP_KEYS.forEach(k=>{
       const cur = last.groups[k]?.원단위;
       const pv = prev.groups[k]?.원단위;
@@ -291,6 +297,33 @@ function render(days){
     html += topGaps.map((g,i)=>`${i+1}. ${GROUP_LABELS[g.group]} <b>${g.설비}</b>: +${g.pct.toFixed(1)}% (차이 +${g.diff.toFixed(2)} kWh/t)`).join('<br>');
     html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${last.date} 기준</div></div></div>`;
     gapEl.innerHTML = html;
+  }
+
+  // ---- 설비 정비이력 카드 (오늘 이상감지된 설비와 매칭될 때만 표시) ----
+  const maintEl = document.getElementById('maintenanceCard');
+  const maintLog = maintenanceLog || [];
+  const todayLog = maintLog.filter(m => m.date === last.date);
+  if (todayLog.length > 0) {
+    // 오늘 이상감지에 걸린 설비/그룹 집합 구성
+    const flaggedEquip = new Set(topGaps.map(g => g.group + '|' + g.설비));
+    const flaggedGroups = new Set(changes.length ? [changes[0].k] : []);
+
+    const matched = todayLog.filter(m => {
+      if (m.equipment) return flaggedEquip.has(m.group + '|' + m.equipment);
+      return flaggedGroups.has(m.group);
+    });
+
+    if (matched.length > 0) {
+      let html = '<div class="maint-card"><div class="title">🔧 관련 설비 점검이력</div>';
+      matched.forEach(m => {
+        html += `<div class="maint-entry">
+          <div class="meta">${m.equipment ? GROUP_LABELS[m.group] + ' · ' + m.equipment : GROUP_LABELS[m.group]} · ${m.date}${m.owner ? ' · ' + m.owner : ''}</div>
+          <div class="content">${m.content}</div>
+        </div>`;
+      });
+      html += '</div>';
+      maintEl.innerHTML = html;
+    }
   }
 
   // ---- 변동 원인 분석: 그룹별 CV, 상관계수, 분산 기여도 ----
