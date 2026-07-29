@@ -273,7 +273,9 @@ function render(days, maintenanceLog){
         ${i===0 ? ' (설비군별 기준 상이 — 방향성 참고용)' : ''}
       </div></div>`;
     });
-    html += `<div class="note-box">📝 <b>${last.date} 실무자 현장메모:</b> ${last.note ? last.note : '<span style="color:var(--muted); font-style:italic;">작성 예정 (담당자 확인 후 반영)</span>'}</div>`;
+    if (last.note) {
+      html += `<div class="note-box">📝 <b>${last.date} 실무자 현장메모:</b> ${last.note}</div>`;
+    }
     insightEl.innerHTML = html;
   }
 
