@@ -7683,6 +7683,14 @@
       "avg_price_per_kwh": 239.5
     }
   ],
-  "maintenance_log": [],
+  "maintenance_log": [
+    {
+      "date": "2026-07-23",
+      "group": "C",
+      "equipment": "13C",
+      "content": "테스트 입력",
+      "owner": "왕기"
+    }
+  ],
   "_lastNotified": "2026-07-29T07:52:48.152Z"
 }
