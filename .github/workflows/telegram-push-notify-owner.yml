@@ -1,0 +1,25 @@
+name: 저장소 push 알림 (개인용)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  notify-owner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 텔레그램 개인 채팅으로 알림 발송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OWNER_CHAT_ID: "8500699667"
+          ACTOR: ${{ github.actor }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_URL: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+        run: |
+          MESSAGE="📦 저장소에 새 push가 있었습니다
+          작성자: ${ACTOR}
+          커밋: ${COMMIT_MSG}
+          🔗 ${COMMIT_URL}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${OWNER_CHAT_ID}" \
+            --data-urlencode text="${MESSAGE}"
