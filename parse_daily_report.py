@@ -95,11 +95,14 @@ def parse_file(path: Path, prior_days=None):
         equip[name] = vals
 
     groups_out = {}
+    target_usage_all = 0.0  # Crusher(QR) 포함 전체 목표사용량 (목표대비 비교용, 텔레그램 알림 등에서 사용)
     for gkey, ginfo in GROUPS.items():
         members = ginfo["members"]
         prod = sum(equip.get(m, {}).get("생산량", 0) for m in members)
         usage = sum(equip.get(m, {}).get("사용량", 0) for m in members)
         cost = sum(equip.get(m, {}).get("비용_합계", 0) for m in members)
+        target_usage_g = sum(equip.get(m, {}).get("생산량", 0) * equip.get(m, {}).get("원단위_목표_part", 0) for m in members)
+        target_usage_all += target_usage_g
 
         equip_detail = {}
         gap_candidates = []
@@ -131,6 +134,7 @@ def parse_file(path: Path, prior_days=None):
             "생산량": round(prod, 0),
             "사용량": round(usage, 0),
             "원단위": round(usage / prod, 2) if prod else None,
+            "목표_원단위": round(target_usage_g / prod, 2) if prod else None,
             "전력비용": round(cost, 0),
             "설비": equip_detail,
             "최대목표초과설비": {"설비": over_candidates[0][0], "목표대비차이": round(over_candidates[0][1],2), "목표대비율": round(over_candidates[0][2],1), "검토필요": over_candidates[0][2] >= REVIEW_THRESHOLD_PCT} if over_candidates else None,
@@ -140,6 +144,8 @@ def parse_file(path: Path, prior_days=None):
     extra = {name: round(equip.get(name, {}).get("사용량", 0), 0) for name in EXTRA_ITEMS if name in equip}
 
     main_groups_usage = sum(groups_out[g]["사용량"] for g in ["R", "Co", "K", "C"])
+    # Crusher(QR) 포함 5개군 합계 - 목표대비 비교용 (텔레그램 알림 등에서 사용)
+    usage_incl_crusher = main_groups_usage + groups_out.get("QR", {}).get("사용량", 0)
     # 전체 설비(그룹 멤버 + 출하/기타/폐열/판매사업) 비용 합계 - 아래 TOU/요금유형 집계와 동일 범위로 통일
     total_cost = sum(equip.get(m, {}).get("비용_합계", 0) for m in equip if m != "합계")
 
@@ -174,6 +180,8 @@ def parse_file(path: Path, prior_days=None):
         "groups": groups_out,
         "extra": extra,
         "total_usage_main4": round(main_groups_usage, 0),
+        "total_usage_incl_crusher": round(usage_incl_crusher, 0),
+        "total_target_usage_incl_crusher": round(target_usage_all, 0),
         "total_cost": round(total_cost, 0),
         "tou": tou,
         "fee_type": fee_type,

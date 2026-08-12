@@ -24,41 +24,46 @@ jobs:
 
           days = sorted(data['days'], key=lambda d: d['date'])
           last = days[-1]
-          prev = days[-2] if len(days) > 1 else None
 
           def fmt(n, d=0):
               return f"{n:,.{d}f}" if n is not None else "-"
 
-          def delta_line(label, cur, prv, unit="", decimals=2):
+          def target_delta_line(label, cur, target, unit="", decimals=2):
               if cur is None:
-                  return ""
-              if prv is None:
+                  return f"· {label}: -"
+              if not target:
                   return f"· {label}: {fmt(cur, decimals)}{unit}"
-              diff = cur - prv
-              pct = (diff / prv * 100) if prv else 0
-              arrow = "🔺" if diff > 0 else ("🔻" if diff < 0 else "➖")
-              return f"· {label}: {fmt(cur, decimals)}{unit} ({arrow} {abs(pct):.1f}% 전일대비)"
+              diff = cur - target
+              pct = diff / target * 100
+              if diff > 0:
+                  arrow = "🔺"
+              elif diff < 0:
+                  arrow = "▼"
+              else:
+                  arrow = "➖"
+              return f"· {label}: {fmt(cur, decimals)}{unit} ({arrow} {abs(pct):.1f}% 목표대비)"
 
           lines = []
           lines.append(f"⚡ *단양공장 전력일보 갱신 알림*")
           lines.append(f"📅 {last['date']}")
           lines.append("")
-          lines.append(delta_line("총 사용량(4개군)", last['total_usage_main4'], prev['total_usage_main4'] if prev else None, " kWh", 0))
-          lines.append(delta_line("전력비용", last['total_cost'], prev['total_cost'] if prev else None, " 원", 0))
-          lines.append("")
           lines.append("설비군별 원단위 (kWh/t, 기준 상이)")
-          group_labels = {"R": "R(원료분쇄)", "Co": "Co(석탄분쇄)", "K": "K(소성)", "C": "C(시멘트분쇄)"}
+          group_labels = {"QR": "Crusher(원료수급)", "R": "R/M(원료분쇄)", "K": "K/L(소성)", "Co": "Co/M(석탄분쇄)", "C": "C/M(시멘트분쇄)"}
           for k, label in group_labels.items():
               cur_v = last['groups'].get(k, {}).get('원단위')
-              prv_v = prev['groups'].get(k, {}).get('원단위') if prev else None
-              lines.append(delta_line(label, cur_v, prv_v, " kWh/t"))
+              target_v = last['groups'].get(k, {}).get('목표_원단위')
+              lines.append(target_delta_line(label, cur_v, target_v, " kWh/t"))
           lines.append("")
-          if last.get('note'):
-              lines.append(f"📝 메모: {last['note']}")
-              lines.append("")
+          unit_values = [last['groups'].get(k, {}).get('원단위') for k in group_labels]
+          unit_sum = sum(v for v in unit_values if v is not None) if any(v is not None for v in unit_values) else None
+          lines.append(f"· 전력원단위: {fmt(unit_sum, 2)} kWh/t")
+          lines.append(target_delta_line("합계(Crusher+R+K+Co+C)", last.get('total_usage_incl_crusher'), last.get('total_target_usage_incl_crusher'), " kWh", 0))
+          lines.append(f"· 전력비용: {fmt(last.get('total_cost'), 0)} 원")
+          lines.append("")
           lines.append("🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/")
+          lines.append("")
 
-          message = "\n".join([l for l in lines if l is not None and l != ""])
+          message = "\n".join(lines)
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write("message<<EOF\n")

@@ -15,7 +15,8 @@
 - index.html: 원단위·사용량·전력비용 추이, 변동 원인 분석, 설비별 변동성 상위,
   만성 목표초과 설비(최근 7일 3회 이상), 콜밀(Co/M) 상세 분석 등을 시각화하는 대시보드
 - .github/workflows/telegram-notify.yml: daily_data.json push 시
-  @wanggi_dashboard_bot이 "단양공장전력관리" 텔레그램 그룹으로 알림 발송
+  @wanggi_dashboard_bot이 "단양공장전력관리" 텔레그램 그룹으로 알림 발송. Crusher 포함 5개군 원단위를
+  목표대비 %로 표시(전일대비 아님), 상승 🔺/하락 🔵▼ 아이콘. Crusher+R+K+Co+C 사용량 합계도 목표대비로 표시.
 
 ## 워크플로우
 1. 원본 CSV/엑셀 업로드
@@ -47,3 +48,13 @@
 - (2026-08-12 추가) 목표대비율(gap_pct)이 20%p 이상인 설비는 "검토필요"로 별도 표시. `REVIEW_THRESHOLD_PCT`
   상수로 parse_daily_report.py(목표초과설비목록/최대목표초과설비에 검토필요 bool 필드 추가)와 index.html
   (gapCard에서 해당 항목에 verdict warn 배지 표시) 양쪽에 동일하게 정의함 — 값을 바꾸려면 두 곳 다 수정 필요.
+- (2026-08-12 추가) 텔레그램 알림 메시지 개편: Crusher(QR) 포함, 메모 줄 삭제, "()" 안 비교 기준을 전일대비 →
+  목표대비로 전환(상승 🔺, 하락 ▼ — 파란 세모는 유니코드에 없어 색상 없이 방향만 표시), 그룹 명칭을 index.html
+  GROUP_LABELS와 통일(R→R/M, K→K/L, C→C/M, Co→Co/M), 맨 끝에 빈 줄 1개 추가. "합계(Crusher+R+K+Co+C)" 줄
+  바로 위에 "전력원단위" 줄을 추가해 Crusher+R/M+K/L+Co/M+C/M 다섯 그룹 원단위 값을 단순 합산해 표시(그룹별
+  생산 기준이 달라 물리적으로 엄밀한 지표는 아님, 단순 합계 요청에 따른 것). 이를 위해 daily_data.json 각
+  그룹에 `목표_원단위`(설비별 목표_원단위를 생산량 가중평균)와 최상위 `total_usage_incl_crusher`/
+  `total_target_usage_incl_crusher`(Crusher 포함 5개군 사용량·목표사용량 합계) 필드를 parse_daily_report.py에서
+  신설. 전력비용은 목표 개념이 없어 델타 없이 값만 표시(전일대비도 삭제). 기존 코드의 `[l for l in lines if l != ""]`
+  필터가 의도한 빈 줄 구분자까지 다 지워버리는 버그가 있었어서 필터 자체를 제거함. 기존 daily_data.json은
+  2026-07-31(현재 최신일)만 위 필드로 수동 보정함 — 다른 날짜가 다시 "최신일"이 되기 전까지는 문제 없음.
