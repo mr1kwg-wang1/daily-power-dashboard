@@ -24,6 +24,36 @@ GROUPS = {
 }
 EXTRA_ITEMS = ["출하", "기타", "폐열", "판매사업"]
 
+# 계획보수 일정 (출처: 2026년 생산 및 출하 계획(안) (260709).pdf)
+# 이 기간 + 재가동 후 유예일수 동안은 목표초과설비 판정에서 제외하고 "보수상태" 배지만 표시한다.
+MAINTENANCE_SCHEDULE = [
+    {"설비": "5K", "시작": "2026-06-15", "종료": "2026-07-26", "메모": "5K 하계보수(계획보수 및 가동대기)"},
+    {"설비": "3K", "시작": "2026-07-13", "종료": "2026-07-22", "메모": "3K 계획보수"},
+    {"설비": "6K", "시작": "2026-07-28", "종료": "2026-09-04", "메모": "6K 하계보수"},
+]
+RESTART_GRACE_DAYS = 2  # 재가동/정지 직후 원단위가 안정화되기까지의 유예일수
+REVIEW_THRESHOLD_PCT = 20  # 목표대비율이 이 값(%) 이상이면 "검토필요" 표시
+
+def maintenance_status(equip, date_str, today_prod, recent_prod):
+    """설비의 보수상태를 판정한다.
+    1) 계획보수 일정표(MAINTENANCE_SCHEDULE)에 포함된 기간(+재가동 유예일)이면 우선 적용.
+    2) 계획에 없더라도, 오늘 생산량이 있으면서 최근 RESTART_GRACE_DAYS일 내에는 생산량이 0이었던 경우
+       (계획보다 실제 정지가 길어져 막 재가동한 경우를 대비한 동적 감지). 원래부터 계속 생산량이
+       0인 유휴설비(예: 1K, 2K)는 "재가동"이 아니므로 today_prod > 0 조건으로 제외한다.
+    """
+    for sched in MAINTENANCE_SCHEDULE:
+        if sched["설비"] != equip:
+            continue
+        start, end = sched["시작"], sched["종료"]
+        if start <= date_str <= end:
+            return "정비중"
+        grace_end = (datetime.date.fromisoformat(end) + datetime.timedelta(days=RESTART_GRACE_DAYS)).isoformat()
+        if end < date_str <= grace_end:
+            return "재가동유예"
+    if today_prod > 0 and recent_prod and any(v == 0 for v in recent_prod):
+        return "재가동유예"
+    return None
+
 def to_float(s):
     s = (s or "").strip()
     if s in ("", "-"):
@@ -33,7 +63,7 @@ def to_float(s):
     except ValueError:
         return 0.0
 
-def parse_file(path: Path):
+def parse_file(path: Path, prior_days=None):
     with open(path, encoding="utf-8-sig") as f:
         rows = list(csv.reader(f))
 
@@ -42,6 +72,17 @@ def parse_file(path: Path):
         raise ValueError(f"파일명에서 날짜를 찾을 수 없습니다: {path.name}")
     date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
     weekday_kr = ["월","화","수","목","금","토","일"][datetime.date.fromisoformat(date_str).weekday()]
+
+    # 재가동 유예 판정용: 이 날짜 이전 RESTART_GRACE_DAYS일간의 설비별 생산량 이력
+    prior_days = sorted([d for d in (prior_days or []) if d["date"] < date_str], key=lambda d: d["date"])
+    recent_prior = prior_days[-RESTART_GRACE_DAYS:] if RESTART_GRACE_DAYS else []
+    def recent_prod_history(equip_name, group_key):
+        vals = []
+        for d in recent_prior:
+            e = d.get("groups", {}).get(group_key, {}).get("설비", {}).get(equip_name)
+            if e is not None:
+                vals.append(e.get("생산량", 0))
+        return vals
 
     equip = {}
     for r in rows[4:]:
@@ -66,14 +107,17 @@ def parse_file(path: Path):
             if m not in equip:
                 continue
             e = equip[m]
+            상태 = maintenance_status(m, date_str, e.get("생산량", 0), recent_prod_history(m, gkey))
             entry = {
                 "사용량": round(e.get("사용량", 0), 0),
                 "생산량": round(e.get("생산량", 0), 0),
                 "목표_원단위": round(e.get("원단위_목표_part", 0), 2) if e.get("원단위_목표_part") else None,
                 "실적_원단위": round(e.get("원단위_실적_part", 0), 2) if e.get("생산량", 0) > 0 else None,
+                "보수상태": 상태,
             }
             equip_detail[m] = entry
-            if entry["목표_원단위"] and entry["실적_원단위"] and entry["생산량"] > 0:
+            # 보수중/재가동유예 설비는 원단위가 예열·권상 부하로 왜곡되므로 목표초과 판정에서 제외
+            if 상태 is None and entry["목표_원단위"] and entry["실적_원단위"] and entry["생산량"] > 0:
                 gap = entry["실적_원단위"] - entry["목표_원단위"]
                 gap_pct = gap / entry["목표_원단위"] * 100
                 gap_candidates.append((m, gap, gap_pct))
@@ -89,8 +133,8 @@ def parse_file(path: Path):
             "원단위": round(usage / prod, 2) if prod else None,
             "전력비용": round(cost, 0),
             "설비": equip_detail,
-            "최대목표초과설비": {"설비": over_candidates[0][0], "목표대비차이": round(over_candidates[0][1],2), "목표대비율": round(over_candidates[0][2],1)} if over_candidates else None,
-            "목표초과설비목록": [{"설비": c[0], "목표대비차이": round(c[1],2), "목표대비율": round(c[2],1)} for c in over_candidates],
+            "최대목표초과설비": {"설비": over_candidates[0][0], "목표대비차이": round(over_candidates[0][1],2), "목표대비율": round(over_candidates[0][2],1), "검토필요": over_candidates[0][2] >= REVIEW_THRESHOLD_PCT} if over_candidates else None,
+            "목표초과설비목록": [{"설비": c[0], "목표대비차이": round(c[1],2), "목표대비율": round(c[2],1), "검토필요": c[2] >= REVIEW_THRESHOLD_PCT} for c in over_candidates],
         }
 
     extra = {name: round(equip.get(name, {}).get("사용량", 0), 0) for name in EXTRA_ITEMS if name in equip}
@@ -143,13 +187,14 @@ def main():
         sys.exit(1)
 
     src = Path(sys.argv[1])
-    entry = parse_file(src)
 
     data_path = Path(__file__).parent / "daily_data.json"
     if data_path.exists():
         data = json.loads(data_path.read_text(encoding="utf-8"))
     else:
         data = {"days": []}
+
+    entry = parse_file(src, prior_days=data["days"])
 
     existing = next((d for d in data["days"] if d["date"] == entry["date"]), None)
     if existing and existing.get("note"):

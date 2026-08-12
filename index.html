@@ -65,6 +65,9 @@
   .gap-card{background:linear-gradient(135deg,#2a1e1e,#1c2228); border:1px solid #4a2a2a; border-left:3px solid var(--warn); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start;}
   .gap-card .icon{font-size:16px;}
   .gap-card .body b{color:var(--warn);}
+  .maint-status-card{background:linear-gradient(135deg,#1c2530,#1c2228); border:1px solid #2a3a4a; border-left:3px solid var(--accent2); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start;}
+  .maint-status-card .icon{font-size:16px;}
+  .maint-status-card .body b{color:var(--accent2);}
   .maint-card{background:linear-gradient(135deg,#1c2a24,#1c2228); border:1px solid #2a4a3a; border-left:3px solid var(--ok); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px;}
   .maint-card .title{font-weight:700; color:var(--ok); margin-bottom:8px; display:flex; align-items:center; gap:6px;}
   .maint-entry{background:#20262d; border-radius:6px; padding:8px 12px; margin-top:6px; font-size:12px;}
@@ -86,6 +89,7 @@
   <div class="kpi-row" id="kpiRow"></div>
   <div id="insightBanner"></div>
   <div id="gapCard"></div>
+  <div id="maintStatusCard"></div>
   <div id="maintenanceCard"></div>
 
   <section>
@@ -209,6 +213,7 @@ const GROUP_LABELS = {QR:"Crusher(원료수급)", R:"R/M(원료분쇄)", Co:"Co/
 const GROUP_COLORS = {QR:"#a685e2", R:"#e08a3c", Co:"#c9564a", K:"#4c8daa", C:"#5fa876"};
 const CORE_GROUP_KEYS = ["R","Co","K","C"];
 const UNIT_CHART_KEYS = ["QR","R","Co","K","C"];
+const REVIEW_THRESHOLD_PCT = 20; // 목표대비율이 이 값(%) 이상이면 "검토필요" 표시
 
 fetch('daily_data.json?_=' + Date.now())
   .then(r => r.json())
@@ -285,7 +290,7 @@ function render(days, maintenanceLog){
   CORE_GROUP_KEYS.forEach(g=>{
     const equipMap = last.groups[g]?.설비 || {};
     Object.entries(equipMap).forEach(([name, e])=>{
-      if (e.목표_원단위 && e.실적_원단위 && e.생산량 > 0) {
+      if (!e.보수상태 && e.목표_원단위 && e.실적_원단위 && e.생산량 > 0) {
         const diff = e.실적_원단위 - e.목표_원단위;
         const pct = diff / e.목표_원단위 * 100;
         if (pct > 0) allGaps.push({group: g, 설비: name, diff, pct});
@@ -296,9 +301,32 @@ function render(days, maintenanceLog){
   const topGaps = allGaps.slice(0, 5);
   if (topGaps.length > 0) {
     let html = '<div class="gap-card"><span class="icon">🎯</span><div class="body"><b>목표 대비 실적 초과 상위</b><br>';
-    html += topGaps.map((g,i)=>`${i+1}. ${GROUP_LABELS[g.group]} <b>${g.설비}</b>: +${g.pct.toFixed(1)}% (차이 +${g.diff.toFixed(2)} kWh/t)`).join('<br>');
-    html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${last.date} 기준</div></div></div>`;
+    html += topGaps.map((g,i)=>{
+      const reviewBadge = g.pct >= REVIEW_THRESHOLD_PCT ? ' <span class="verdict warn">검토필요</span>' : '';
+      return `${i+1}. ${GROUP_LABELS[g.group]} <b>${g.설비}</b>: +${g.pct.toFixed(1)}% (차이 +${g.diff.toFixed(2)} kWh/t)${reviewBadge}`;
+    }).join('<br>');
+    html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${last.date} 기준 · 목표대비 ${REVIEW_THRESHOLD_PCT}%p 이상 차이는 별도 검토가 필요합니다.</div></div></div>`;
     gapEl.innerHTML = html;
+  }
+
+  // ---- 보수중/재가동유예 설비 배지 (목표초과 판정에서 제외된 설비 안내) ----
+  const maintStatusEl = document.getElementById('maintStatusCard');
+  if (maintStatusEl) {
+    const inMaint = [];
+    CORE_GROUP_KEYS.forEach(g=>{
+      const equipMap = last.groups[g]?.설비 || {};
+      Object.entries(equipMap).forEach(([name, e])=>{
+        if (e.보수상태) inMaint.push({group: g, 설비: name, status: e.보수상태});
+      });
+    });
+    if (inMaint.length > 0) {
+      let html = '<div class="maint-status-card"><span class="icon">🔧</span><div class="body"><b>보수중 / 재가동유예 설비</b> (목표초과 판정 제외)<br>';
+      html += inMaint.map(m=>`${GROUP_LABELS[m.group]} <b>${m.설비}</b> — ${m.status}`).join('<br>');
+      html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${last.date} 기준. 계획보수 일정과 실제 생산 재개 이력을 함께 반영합니다.</div></div></div>`;
+      maintStatusEl.innerHTML = html;
+    } else {
+      maintStatusEl.innerHTML = '';
+    }
   }
 
   // ---- 설비 정비이력 카드 (오늘 이상감지된 설비와 매칭될 때만 표시) ----
