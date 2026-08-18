@@ -1,0 +1,24 @@
+name: 발표자료 텔레그램 전송
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'raw/2026-07/8월25일_자체보고회_발표자료_초안.docx'
+
+jobs:
+  send-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 단양공장전력관리 그룹으로 파일 전송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F chat_id="${TELEGRAM_CHAT_ID}" \
+            -F caption="📊 8/25 자체보고회 발표자료 초안입니다. (실무자 검토·완성 예정)" \
+            -F document=@"raw/2026-07/8월25일_자체보고회_발표자료_초안.docx"
