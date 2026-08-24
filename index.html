@@ -658,31 +658,38 @@ function render(days, maintenanceLog){
     if (pts2.length < 7) { if (statsEl2) statsEl2.textContent = '데이터가 충분하지 않습니다 (7일 이상 필요).'; return; }
     const n2 = pts2.length;
     const sum = arr => arr.reduce((s,v)=>s+v,0);
-    const X1 = pts2.map(p=>p.mid/100), X2 = pts2.map(p=>p.peak/100), Y2 = pts2.map(p=>p.price);
-    const s1=sum(X1), s2=sum(X2), sy=sum(Y2);
-    const s11=sum(X1.map(x=>x*x)), s22=sum(X2.map(x=>x*x)), s12=sum(X1.map((x,i)=>x*X2[i]));
-    const s1y=sum(X1.map((x,i)=>x*Y2[i])), s2y=sum(X2.map((x,i)=>x*Y2[i]));
-    function det3(m){ return m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1]) - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0]) + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]); }
-    const Amat = [[n2,s1,s2],[s1,s11,s12],[s2,s12,s22]];
-    function repl(col,b){ const M=Amat.map(r=>r.slice()); for(let i=0;i<3;i++) M[i][col]=b[i]; return M; }
-    const bvec=[sy,s1y,s2y];
-    const D = det3(Amat);
-    const a2 = det3(repl(0,bvec))/D;
-    const b1 = det3(repl(1,bvec))/D;
-    const b2 = det3(repl(2,bvec))/D;
-    const meanY2 = sy/n2;
-    const pred2 = pts2.map((p,i)=> a2 + b1*X1[i] + b2*X2[i]);
-    const ssTot2 = sum(Y2.map(y=>(y-meanY2)**2));
-    const ssRes2 = sum(Y2.map((y,i)=>(y-pred2[i])**2));
-    const r2b = ssTot2 !== 0 ? 1 - ssRes2/ssTot2 : 0;
-    const pOff = a2, pMid = a2 + b1, pPeak = a2 + b2;
+
+    // 산업용(을) 고압B, 선택3 시간대별 계약단가(원/kWh) - 계절별(KEPCO 고시)
+    // 여름철(6~8월) 값은 2026년 7월 전력월보 "합성계량" 시트의 실제 청구단가로 확인됨
+    // (11,211,217kWh×173.1원, 4,512,137kWh×254.4원, 25,371,725kWh×120.8원이 각 밴드 사용요금과 정확히 일치).
+    // 봄가을철/겨울철 단가는 미확인 — 계약서·청구서 확인 후 채워넣을 것.
+    const TOU_RATES = {
+      summer:     { off: 120.8, mid: 173.1, peak: 254.4 }, // 6~8월, 확인됨(2026-07 실제 청구)
+      springFall: null, // 3~5월, 9~10월 - 미확인
+      winter:     null, // 11~2월 - 미확인
+    };
+    function seasonOf(month) {
+      if (month >= 6 && month <= 8) return 'summer';
+      if (month === 11 || month === 12 || month <= 2) return 'winter';
+      return 'springFall';
+    }
+    const latestMonth = new Date(pts2[pts2.length-1].date + 'T00:00:00').getMonth() + 1;
+    const season = seasonOf(latestMonth);
+    const seasonLabel = season === 'summer' ? '여름철(6~8월)' : season === 'winter' ? '겨울철(11~2월)' : '봄가을철(3~5월,9~10월)';
+    const rates = TOU_RATES[season];
+    if (!rates) {
+      if (statsEl2) statsEl2.textContent = `${latestMonth}월(${seasonLabel})의 산업용(을) 고압B 선택3 단가가 아직 확인되지 않아 시나리오 2를 계산할 수 없습니다. 계약서·청구서 확인 후 TOU_RATES에 반영이 필요합니다.`;
+      if (noteEl2) noteEl2.textContent = '';
+      return;
+    }
+    const pOff = rates.off, pMid = rates.mid, pPeak = rates.peak;
 
     const weekdayPts = pts2.filter(p=>p.isWeekday);
     const avgWeekdayUsage = weekdayPts.length ? sum(weekdayPts.map(p=>p.usage))/weekdayPts.length : 0;
     const hourlyUsage = avgWeekdayUsage / 24;
 
     if (statsEl2) {
-      statsEl2.innerHTML = `최근 ${n2}일 데이터 기준(회귀분석, R² ${fmt(r2b*100,0)}%) &middot; 내재단가 추정 &mdash; 경부하 <b>${fmt(pOff,1)}원/kWh</b> &middot; 중간부하 <b>${fmt(pMid,1)}원/kWh</b> &middot; 최대부하 <b>${fmt(pPeak,1)}원/kWh</b> &middot; 평일 시간당 평균사용량 <b>${fmt(hourlyUsage,0)}kWh</b>`;
+      statsEl2.innerHTML = `최근 ${n2}일 데이터 기준 &middot; 산업용(을) 고압B 선택3 ${seasonLabel} 계약단가 &mdash; 경부하 <b>${fmt(pOff,1)}원/kWh</b> &middot; 중간부하 <b>${fmt(pMid,1)}원/kWh</b> &middot; 최대부하 <b>${fmt(pPeak,1)}원/kWh</b> &middot; 평일 시간당 평균사용량 <b>${fmt(hourlyUsage,0)}kWh</b>`;
     }
 
     const weekdaysPerYear = 5 * 52; // 평일 5일 × 52주 기준(연 260일)
@@ -720,7 +727,7 @@ function render(days, maintenanceLog){
     update2();
 
     if (noteEl2) {
-      noteEl2.textContent = `※ 밴드별 단가(경부하/중간부하/최대부하)는 실제 계약단가가 아니라, 최근 ${n2}일간 일평균단가와 시간대별 사용비중(TOU 비중) 데이터를 회귀분석하여 역산한 추정치입니다. 이 회귀분석은 시나리오 1과 달리 주말 데이터를 포함해야 세 밴드 단가가 안정적으로 식별됩니다 — 평일 데이터만으로는 중간부하·최대부하 비중이 함께 움직여(다중공선성) 추정치가 불안정해짐을 확인했습니다. 시간당 사용량은 평일 일평균사용량÷24로 근사했으며(실제 시간대별 부하곡선과 다를 수 있음), 토요일 이전분은 중간부하 단가, 일요일 이전분은 경부하 단가(토·일 모두 최대부하 미적용 확인됨)로 가정했습니다. 연간 절감액은 평일 5일×52주(연 260일) 기준에 가동률(운휴·돌발정지 감안, 기본 90%)을 곱해 산정한 추정치이며, 가동률은 실제 정지 이력 통계가 아닌 조정 가능한 가정치이므로 현장 실제값으로 조정해 사용하시기 바랍니다. 연속공정 특성상 실제 이전 가능 여부는 별도 현장 검토가 필요합니다.`;
+      noteEl2.textContent = `※ 밴드별 단가(경부하/중간부하/최대부하)는 회귀분석 추정치가 아니라, 산업용(을) 고압B 선택3 요금제의 실제 계약단가입니다(${seasonLabel} 기준, 2026년 7월 전력월보 "합성계량" 시트의 실제 청구단가로 확인됨). 시간당 사용량은 평일 일평균사용량÷24로 근사했으며(실제 시간대별 부하곡선과 다를 수 있음), 토요일 이전분은 중간부하 단가, 일요일 이전분은 경부하 단가(토·일 모두 최대부하 미적용 확인됨)로 가정했습니다. 연간 절감액은 평일 5일×52주(연 260일) 기준에 가동률(운휴·돌발정지 감안, 기본 90%)을 곱해 산정한 추정치이며, 가동률은 실제 정지 이력 통계가 아닌 조정 가능한 가정치이므로 현장 실제값으로 조정해 사용하시기 바랍니다. 연속공정 특성상 실제 이전 가능 여부는 별도 현장 검토가 필요합니다. 봄가을철/겨울철 단가는 계약서 확인 후 반영 예정입니다.`;
     }
   })();
 }
