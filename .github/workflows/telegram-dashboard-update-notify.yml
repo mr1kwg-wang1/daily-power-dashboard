@@ -1,0 +1,27 @@
+name: 대시보드 업데이트 알림 (그룹)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'index.html'
+
+jobs:
+  notify-group:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 단양공장전력관리 그룹으로 알림 발송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          MESSAGE="🛠️ 전력일보 대시보드가 업데이트되었습니다 (${ACTOR})
+
+          ${COMMIT_MSG}
+
+          🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="${MESSAGE}"
