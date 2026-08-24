@@ -652,7 +652,7 @@ function render(days, maintenanceLog){
       .map(d => {
         const dt = new Date(d.date + 'T00:00:00');
         const w = dt.getDay();
-        return { mid: d.tou.중간부하_비중, peak: d.tou.최대부하_비중, off: d.tou.경부하_비중, price: d.avg_price_per_kwh, usage: d.total_usage_main4, isWeekday: (w>=1 && w<=5) };
+        return { date: d.date, mid: d.tou.중간부하_비중, peak: d.tou.최대부하_비중, off: d.tou.경부하_비중, price: d.avg_price_per_kwh, usage: d.total_usage_main4, isWeekday: (w>=1 && w<=5) };
       });
     const statsEl2 = document.getElementById('shiftStats');
     const noteEl2 = document.getElementById('shiftNote');
