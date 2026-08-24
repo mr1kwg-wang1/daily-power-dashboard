@@ -660,35 +660,57 @@ function render(days, maintenanceLog){
     const n2 = pts2.length;
     const sum = arr => arr.reduce((s,v)=>s+v,0);
 
-    // 산업용(을) 고압B, 선택3 시간대별 계약단가(원/kWh) - 계절별(KEPCO 고시, 2026.04.16자 시행 요금표 기준)
+    // 산업용(을) 고압B, 선택3 시간대별 계약단가(원/kWh) - 계절별(KEPCO 고시)
     // 기본요금 8,190원/kW은 별도(이 시나리오의 사용요금 절감 계산에는 미반영).
-    const TOU_RATES = {
+    // (1) 2026.04.16자 시행 요금표 — 개정 전, ~2026-09-30까지 적용
+    const TOU_RATES_BEFORE = {
       summer:     { off: 125.9, mid: 173.1, peak: 237.5 }, // 여름철(6~8월)
       springFall: { off: 125.9, mid: 143.2, peak: 160.3 }, // 봄·가을철(3~5월, 9~10월)
       winter:     { off: 133.0, mid: 173.1, peak: 212.4 }, // 겨울철(11~2월)
     };
+    // (2) 2026-10-01자 KEPCO 기본공급약관 개정 반영 — "산업용(을) 최대부하 평균 15.4원/kWh 인하,
+    //     경부하 5.1원/kWh 인상"(전 계절 공통 명시분)을 위 표에 그대로 가감한 근사치.
+    //     중간부하는 구체적 변경폭이 개정 안내문에 없어 기존값을 그대로 유지함 — 정확한 신 단가표
+    //     확인되면 이 블록을 교체할 것.
+    const RATE_CHANGE_DATE = '2026-10-01';
+    const TOU_RATES_AFTER = {
+      summer:     { off: 131.0, mid: 173.1, peak: 222.1 },
+      springFall: { off: 131.0, mid: 143.2, peak: 144.9 },
+      winter:     { off: 138.1, mid: 173.1, peak: 197.0 },
+    };
+    // (3) 주말 낮 시간대 할인: 봄·가을철(3~5월, 9~10월)에 한해 토·일·공휴일 11~14시 전력량요금
+    //     50% 할인(2026-10-01 시행). 이 시나리오는 시간대 단위 계산이 없어, 이전(shift)된 사용량이
+    //     이 할인 구간(11~14시)에 들어간다고 가정하고 토·일 이전분 모두에 적용함.
+    const WEEKEND_MIDDAY_DISCOUNT = { startDate: '2026-10-01', seasons: ['springFall'], rate: 0.5 };
+
     function seasonOf(month) {
       if (month >= 6 && month <= 8) return 'summer';
       if (month === 11 || month === 12 || month <= 2) return 'winter';
       return 'springFall';
     }
-    const latestMonth = new Date(pts2[pts2.length-1].date + 'T00:00:00').getMonth() + 1;
+    const latestDateStr = pts2[pts2.length-1].date;
+    const latestMonth = new Date(latestDateStr + 'T00:00:00').getMonth() + 1;
     const season = seasonOf(latestMonth);
     const seasonLabel = season === 'summer' ? '여름철(6~8월)' : season === 'winter' ? '겨울철(11~2월)' : '봄가을철(3~5월,9~10월)';
-    const rates = TOU_RATES[season];
+    const rateRevised = latestDateStr >= RATE_CHANGE_DATE;
+    const rates = (rateRevised ? TOU_RATES_AFTER : TOU_RATES_BEFORE)[season];
     if (!rates) {
       if (statsEl2) statsEl2.textContent = `${latestMonth}월(${seasonLabel})의 산업용(을) 고압B 선택3 단가가 아직 확인되지 않아 시나리오 2를 계산할 수 없습니다. 계약서·청구서 확인 후 TOU_RATES에 반영이 필요합니다.`;
       if (noteEl2) noteEl2.textContent = '';
       return;
     }
     const pOff = rates.off, pMid = rates.mid, pPeak = rates.peak;
+    const weekendDiscountActive = latestDateStr >= WEEKEND_MIDDAY_DISCOUNT.startDate && WEEKEND_MIDDAY_DISCOUNT.seasons.includes(season);
+    const weekendDiscountMult = weekendDiscountActive ? (1 - WEEKEND_MIDDAY_DISCOUNT.rate) : 1;
 
     const weekdayPts = pts2.filter(p=>p.isWeekday);
     const avgWeekdayUsage = weekdayPts.length ? sum(weekdayPts.map(p=>p.usage))/weekdayPts.length : 0;
     const hourlyUsage = avgWeekdayUsage / 24;
 
     if (statsEl2) {
-      statsEl2.innerHTML = `최근 ${n2}일 데이터 기준 &middot; 산업용(을) 고압B 선택3 ${seasonLabel} 계약단가 &mdash; 경부하 <b>${fmt(pOff,1)}원/kWh</b> &middot; 중간부하 <b>${fmt(pMid,1)}원/kWh</b> &middot; 최대부하 <b>${fmt(pPeak,1)}원/kWh</b> &middot; 평일 시간당 평균사용량 <b>${fmt(hourlyUsage,0)}kWh</b>`;
+      const rateVerEl = rateRevised ? '2026-10-01 개정 요금' : '2026-04-16 요금표';
+      const discountNote = weekendDiscountActive ? ' &middot; <span style="color:#4caf50;">주말 낮 11~14시 50% 할인 적용중</span>' : '';
+      statsEl2.innerHTML = `최근 ${n2}일 데이터 기준 &middot; 산업용(을) 고압B 선택3 ${seasonLabel} 계약단가(${rateVerEl}) &mdash; 경부하 <b>${fmt(pOff,1)}원/kWh</b> &middot; 중간부하 <b>${fmt(pMid,1)}원/kWh</b> &middot; 최대부하 <b>${fmt(pPeak,1)}원/kWh</b> &middot; 평일 시간당 평균사용량 <b>${fmt(hourlyUsage,0)}kWh</b>${discountNote}`;
     }
 
     const weekdaysPerYear = 5 * 52; // 평일 5일 × 52주 기준(연 260일)
@@ -705,8 +727,8 @@ function render(days, maintenanceLog){
       if (availValueEl) availValueEl.textContent = Math.round(availability*100) + '%';
       const shiftedKwhPerDay = hourlyUsage * hoursPerWeekday;
       const currentCostPerDay = shiftedKwhPerDay * pPeak;
-      const satCostPerDay = shiftedKwhPerDay * pMid;
-      const sunCostPerDay = shiftedKwhPerDay * pOff;
+      const satCostPerDay = shiftedKwhPerDay * pMid * weekendDiscountMult;
+      const sunCostPerDay = shiftedKwhPerDay * pOff * weekendDiscountMult;
       const dailySavingSat = currentCostPerDay - satCostPerDay;
       const dailySavingSun = currentCostPerDay - sunCostPerDay;
       const dailySavingSplit = (dailySavingSat + dailySavingSun) / 2;
@@ -726,7 +748,13 @@ function render(days, maintenanceLog){
     update2();
 
     if (noteEl2) {
-      noteEl2.textContent = `※ 밴드별 단가(경부하/중간부하/최대부하)는 회귀분석 추정치가 아니라, 산업용(을) 고압B 선택3 요금제의 KEPCO 공식 고시 계약단가입니다(2026.04.16자 시행 요금표, ${seasonLabel} 기준). 기본요금(8,190원/kW)은 이 사용요금 절감 계산에는 포함되지 않습니다. 시간당 사용량은 평일 일평균사용량÷24로 근사했으며(실제 시간대별 부하곡선과 다를 수 있음), 토요일 이전분은 중간부하 단가, 일요일 이전분은 경부하 단가(토·일 모두 최대부하 미적용 확인됨)로 가정했습니다. 연간 절감액은 평일 5일×52주(연 260일) 기준에 가동률(운휴·돌발정지 감안, 기본 90%)을 곱해 산정한 추정치이며, 가동률은 실제 정지 이력 통계가 아닌 조정 가능한 가정치이므로 현장 실제값으로 조정해 사용하시기 바랍니다. 연속공정 특성상 실제 이전 가능 여부는 별도 현장 검토가 필요합니다.`;
+      const revisionNote = rateRevised
+        ? ` 2026-10-01 KEPCO 기본공급약관 개정이 반영된 요금입니다(최대부하 -15.4원/kWh, 경부하 +5.1원/kWh — 중간부하는 개정 안내문에 구체적 변경폭이 없어 기존값 유지, 근사치이므로 정확한 신 단가표 확인 시 갱신 필요).`
+        : ` 2026-10-01부터 KEPCO 기본공급약관 개정으로 요금이 조정될 예정입니다(최대부하 평균 15.4원/kWh 인하, 경부하 5.1원/kWh 인상 등 — 표시 중인 데이터 기간이 개정 이후가 되면 자동으로 개정 요금이 적용됩니다).`;
+      const discountText = weekendDiscountActive
+        ? ` 봄·가을철 주말 낮 시간대(토·일·공휴일 11~14시) 전력량요금 50% 할인(2026-10-01 시행)이 토·일 이전분에 적용되어 있습니다(이전된 사용량이 이 시간대에 들어간다고 가정).`
+        : ` 참고로 봄·가을철(3~5월,9~10월)엔 2026-10-01부터 주말 낮(11~14시) 전력량요금 50% 할인이 추가되는데, 현재 표시 중인 데이터엔 아직 적용되지 않습니다(시기 또는 계절 조건 미충족).`;
+      noteEl2.textContent = `※ 밴드별 단가(경부하/중간부하/최대부하)는 회귀분석 추정치가 아니라, 산업용(을) 고압B 선택3 요금제의 KEPCO 공식 고시 계약단가입니다(${seasonLabel} 기준).${revisionNote} 기본요금(8,190원/kW)은 이 사용요금 절감 계산에는 포함되지 않습니다.${discountText} 시간당 사용량은 평일 일평균사용량÷24로 근사했으며(실제 시간대별 부하곡선과 다를 수 있음), 토요일 이전분은 중간부하 단가, 일요일 이전분은 경부하 단가(토·일 모두 최대부하 미적용 확인됨)로 가정했습니다. 연간 절감액은 평일 5일×52주(연 260일) 기준에 가동률(운휴·돌발정지 감안, 기본 90%)을 곱해 산정한 추정치이며, 가동률은 실제 정지 이력 통계가 아닌 조정 가능한 가정치이므로 현장 실제값으로 조정해 사용하시기 바랍니다. 연속공정 특성상 실제 이전 가능 여부는 별도 현장 검토가 필요합니다.`;
     }
   })();
 }
