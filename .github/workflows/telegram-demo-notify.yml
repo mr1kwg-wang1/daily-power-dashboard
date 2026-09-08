@@ -19,7 +19,8 @@ jobs:
       - name: 변경된 시연용 data.json 찾기
         id: find
         run: |
-          FILE=$(git diff --name-only HEAD~1 HEAD -- 'demo/**/data.json' | tail -n1)
+          FILE=$(find demo -mindepth 2 -maxdepth 2 -name data.json | sort | tail -n1)
+          if [ -z "$FILE" ]; then echo "demo/**/data.json 을 찾지 못했습니다" >&2; exit 1; fi
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
 
       - name: 메시지 생성 및 발송
