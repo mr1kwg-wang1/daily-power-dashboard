@@ -1,0 +1,83 @@
+name: 시연용 단독 리포트 알림 (텔레그램)
+
+# demo/ 폴더는 daily_data.json/index.html(7월 누적 데이터·실제 대시보드)과 완전히 격리된
+# 시연 전용 스냅샷입니다. 이 워크플로는 demo/ 경로 변경에만 반응하며, 실제 일보 알림
+# (telegram-notify.yml)과는 별개로 동작합니다.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'demo/**/data.json'
+
+jobs:
+  notify-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 변경된 시연용 data.json 찾기
+        id: find
+        run: |
+          FILE=$(git diff --name-only HEAD~1 HEAD -- 'demo/**/data.json' | tail -n1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: 메시지 생성 및 발송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DATA_FILE: ${{ steps.find.outputs.file }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          with open(os.environ['DATA_FILE'], encoding='utf-8') as f:
+              d = json.load(f)
+
+          def fmt(n, dp=0):
+              return f"{n:,.{dp}f}" if n is not None else "-"
+
+          def line(label, cur, target, unit="", dp=2):
+              if cur is None:
+                  return f"· {label}: -"
+              if not target:
+                  return f"· {label}: {fmt(cur, dp)}{unit}"
+              diff = cur - target
+              pct = diff / target * 100
+              arrow = "🔺" if diff > 0 else ("▼" if diff < 0 else "➖")
+              return f"· {label}: {fmt(cur, dp)}{unit} ({arrow} {abs(pct):.1f}% 목표대비)"
+
+          labels = {"QR": "Crusher(원료수급)", "R": "R/M(원료분쇄)", "Co": "Co/M(석탄분쇄)", "K": "K/L(소성)", "C": "C/M(시멘트분쇄)"}
+
+          lines = []
+          lines.append("🎬 *[시연용] 전력일보 단독 리포트*")
+          lines.append(f"📅 {d['date']} ({d['weekday']})")
+          lines.append("_daily_data.json(7월 누적)과 연동되지 않은 1일치 단독 스냅샷입니다_")
+          lines.append("")
+          for k, label in labels.items():
+              g = d['groups'].get(k, {})
+              lines.append(line(label, g.get('원단위'), g.get('목표_원단위'), " kWh/t"))
+          lines.append("")
+          lines.append(line("전체 사용량(Crusher+R+K+Co+C)", d.get('total_usage_incl_crusher'), d.get('total_target_usage_incl_crusher'), " kWh", 0))
+          lines.append(f"· 전력비용: {fmt(d.get('total_cost'), 0)} 원")
+          lines.append("")
+
+          review = []
+          for k in labels:
+              review += [it for it in d['groups'].get(k, {}).get('목표초과설비목록', []) if it.get('검토필요')]
+          if review:
+              lines.append("⚠️ 검토필요 설비:")
+              for it in review:
+                  lines.append(f"  - {it['설비']} (+{it['목표대비율']}%)")
+              lines.append("")
+
+          lines.append("🔗 GitHub: mr1kwg-wang1/daily-power-dashboard (demo/2026-08-01/dashboard.html)")
+
+          message = "\n".join(lines)
+          with open("msg.txt", "w", encoding="utf-8") as f:
+              f.write(message)
+          PYEOF
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text@msg.txt

@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>단양공장 전력일보 대시보드 (8/1 단독 리포트)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{
+    --bg:#14181c; --panel:#1c2228; --panel2:#20262d;
+    --line:#2b333b; --text:#e7ebee; --muted:#8a95a1;
+    --accent:#e08a3c; --accent2:#4c8daa; --ok:#5fa876; --warn:#c9564a;
+    --purple:#8f7fe0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Pretendard","Malgun Gothic",-apple-system,sans-serif;
+    line-height:1.5;
+  }
+  header{
+    padding:28px 32px 20px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;
+  }
+  header h1{margin:0; font-size:22px; font-weight:700; letter-spacing:-0.3px;}
+  header .sub{color:var(--muted); font-size:13px; margin-top:4px;}
+  header .updated{font-size:12px; color:var(--muted); text-align:right;}
+  .demo-tag{display:inline-block; background:linear-gradient(135deg,#2447c9,#1c2228); color:#cfe0ff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; margin-bottom:8px; border:1px solid #35509c;}
+  main{padding:24px 32px 60px; max-width:1180px; margin:0 auto;}
+  .kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px;}
+  .kpi-row .kpi:nth-child(1){grid-column:span 3;}
+  .kpi-row .kpi:nth-child(2){grid-column:span 2;}
+  @media(max-width:820px){.kpi-row{grid-template-columns:repeat(2,1fr);} .kpi-row .kpi:nth-child(1),.kpi-row .kpi:nth-child(2){grid-column:span 1;}}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px;}
+  .kpi .label{font-size:12px; color:var(--muted); margin-bottom:6px;}
+  .kpi .value{font-size:24px; font-weight:700;}
+  .kpi .delta{font-size:12px; margin-top:4px;}
+  .delta.up{color:var(--warn);} .delta.down{color:var(--ok);}
+  #insightBanner{margin:0 0 24px;}
+  .insight-card{background:linear-gradient(135deg,#2a2118,#1c2228); border:1px solid #4a3a22; border-left:3px solid var(--accent); border-radius:10px; padding:14px 18px; font-size:13px; display:flex; gap:10px; align-items:flex-start; margin-bottom:10px;}
+  .insight-card .icon{font-size:16px;}
+  .insight-card .body b{color:var(--accent);}
+  .note-box{margin-top:6px; font-size:12px; color:var(--muted); background:#20262d; border-left:2px solid var(--accent2); padding:8px 10px; border-radius:4px;}
+  .note-box b{color:var(--accent2);}
+  section{margin-bottom:32px;}
+  section h2{font-size:15px; font-weight:700; margin:0 0 12px; color:var(--text); border-left:3px solid var(--accent); padding-left:10px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px;}
+  .chart-wrap{position:relative; height:260px;}
+  .chart-wrap.short{height:200px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--line);}
+  th:first-child,td:first-child{text-align:left; color:var(--muted);}
+  th{color:var(--muted); font-weight:600; font-size:12px;}
+  tr:last-child td{border-bottom:none;}
+  .badge{display:inline-block; font-size:10px; padding:2px 6px; border-radius:4px; margin-left:6px; vertical-align:middle;}
+  .verdict{display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600;}
+  .verdict.ok{background:#1f3a2c; color:#5fa876;}
+  .verdict.mid{background:#3a3020; color:#d9a24a;}
+  .verdict.warn{background:#3a2020; color:#e08a8a;}
+  .gap-card{background:linear-gradient(135deg,#2a1e1e,#1c2228); border:1px solid #4a2a2a; border-left:3px solid var(--warn); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start;}
+  .gap-card .icon{font-size:16px;}
+  .gap-card .body b{color:var(--warn);}
+  .maint-status-card{background:linear-gradient(135deg,#1c2530,#1c2228); border:1px solid #2a3a4a; border-left:3px solid var(--accent2); border-radius:10px; padding:14px 18px; font-size:13px; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start;}
+  .maint-status-card .icon{font-size:16px;}
+  .maint-status-card .body b{color:var(--accent2);}
+  footer{padding:20px 32px; color:var(--muted); font-size:12px; border-top:1px solid var(--line);}
+  footer b{color:var(--accent2);}
+  .section-sub{font-size:11px; font-weight:500; color:var(--muted);}
+  .placeholder-card{color:var(--muted); font-size:13px; line-height:1.7; padding:24px 18px; text-align:center;}
+  .placeholder-card.small{padding:14px; margin-top:0;}
+  .placeholder-card b{color:var(--accent2);}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="demo-tag">🎬 8월 시연용 · 단독 스냅샷 (daily_data.json 비연동)</div>
+    <h1>단양공장 전력일보 대시보드</h1>
+    <div class="sub">Sungshin Cement · Danyang Plant · Daily Power Usage Monitor</div>
+  </div>
+  <div class="updated" id="updatedAt">데이터 로딩 중...</div>
+</header>
+
+<main>
+  <div class="kpi-row" id="kpiRow"></div>
+  <div class="note-box" style="margin-bottom:16px;">💡 <b>전일대비</b> 비교(KPI 증감률)는 최소 <b>2일 이상</b> 데이터가 누적되면 자동으로 표시됩니다. (현재 1일치 단독 스냅샷)</div>
+  <div id="insightBanner"></div>
+  <div id="gapCard"></div>
+  <div id="maintStatusCard"></div>
+
+  <section>
+    <h2>일별 총 사용량 추이 (R+Co+K+C, kWh)</h2>
+    <div class="card placeholder-card">현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
+  </section>
+
+  <section>
+    <h2>설비군별 사용량 구성 (kWh) <span class="section-sub">— 당일 스냅샷</span></h2>
+    <div class="card"><div class="chart-wrap"><canvas id="usageChart"></canvas></div></div>
+  </section>
+
+  <section>
+    <h2>설비군별 원단위 추이 (kWh/t)</h2>
+    <div class="card placeholder-card">현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
+  </section>
+
+  <section>
+    <h2>설비군별 원단위 — 실적 vs 목표 (kWh/t) <span class="section-sub">— 당일 스냅샷</span></h2>
+    <div class="card">
+      <div class="chart-wrap"><canvas id="unitChart"></canvas></div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+        ※ 설비군별 원단위는 각자 다른 생산량 기준(원료/석탄/클링커/시멘트)을 사용하므로, 그룹 간 절대값 비교보다 각 그룹의 목표대비 방향성 위주로 보시기 바랍니다.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div class="card">
+        <h2 style="margin-top:0">평균 전력단가 추이 (원/kWh)</h2>
+        <div class="placeholder-card small">현재 1일치로는 추이 표시 불가. <b>2일 이상</b> 필요.</div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">시멘트 톤당 전력비 추이 (원/톤)</h2>
+        <div class="placeholder-card small">현재 1일치로는 추이 표시 불가. <b>2일 이상</b> 필요.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div class="card">
+        <h2 style="margin-top:0">당일 단가 지표 <span class="section-sub">— 당일 스냅샷</span></h2>
+        <div class="kpi-row" style="grid-template-columns:1fr; gap:10px;">
+          <div class="kpi"><div class="label">평균 전력단가 (원/kWh)</div><div class="value" id="avgPriceVal">-</div></div>
+          <div class="kpi"><div class="label">시멘트 톤당 전력비 (원/톤)</div><div class="value" id="costPerTonVal">-</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">시간대별 요금 비중 (TOU) <span class="section-sub">— 당일 스냅샷</span></h2>
+        <div class="chart-wrap short"><canvas id="touChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>일별 전력비용 추이 (원)</h2>
+    <div class="card placeholder-card">현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
+  </section>
+
+  <section>
+    <h2>설비군별 전력비용 (원) <span class="section-sub">— 당일 스냅샷</span></h2>
+    <div class="card"><div class="chart-wrap"><canvas id="costChart"></canvas></div></div>
+  </section>
+
+  <section>
+    <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
+    <div class="card">
+      <table id="dayTypeTable"></table>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted);">각 요일 유형별 표본이 쌓일수록(특히 평일 다수·주말 각 수 회 이상) 비교 신뢰도가 높아집니다.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>변동 원인 분석 (그룹별 기여도)</h2>
+    <div class="card placeholder-card">현재 1일치 데이터로는 통계적 분석이 불안정합니다. <b>5일 이상</b> 누적되면 자동으로 표시됩니다.<br>
+      <span style="font-size:11px; color:var(--muted);">※ 상관계수는 생산량과 사용량의 선형관계를 나타냅니다. 1에 가까우면 "생산량에 비례한 정상 변동", 0에 가까우면 "생산량과 무관한 전력 소모(주의 필요)"를 의미합니다.</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>설비별 변동성 상위 (CV 기준)</h2>
+    <div class="card placeholder-card">5일 이상 데이터가 쌓이면 표시됩니다.</div>
+  </section>
+
+  <section>
+    <h2>설비별 상세 데이터 (2026-08-01)</h2>
+    <div class="card" style="overflow-x:auto;">
+      <table id="detailTable"></table>
+    </div>
+  </section>
+
+  <section>
+    <h2>절감 예상 시나리오 1 (최대부하 비중 축소)</h2>
+    <div class="card placeholder-card">데이터가 충분하지 않습니다 (<b>5일 이상</b> 필요).</div>
+  </section>
+
+  <section>
+    <h2>절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이전)</h2>
+    <div class="card placeholder-card">데이터가 충분하지 않습니다 (<b>7일 이상</b> 필요).</div>
+  </section>
+</main>
+
+<footer>
+  성신양회 단양공장 비상계획관실 · 전력일보 기반 자동 집계 · <b>8월 시연용 단독 리포트</b> — 7월 누적 daily_data.json과는 연동되지 않은 1일치 스냅샷입니다.
+  원단위 추이·상관계수·변동성(CV)·절감 시나리오 등 다수 날짜가 필요한 분석은 이 리포트 범위에서 제외했습니다.
+</footer>
+
+<script>
+const D = {
+  "date": "2026-08-01",
+  "weekday": "토",
+  "day_type": "토요일",
+  "source": "file",
+  "file_name": "전력일보_2026_08_01.csv",
+  "groups": {
+    "QR": {
+      "label": "Q/R (원료수급)",
+      "생산량": 5641.0,
+      "사용량": 17234.0,
+      "원단위": 3.06,
+      "목표_원단위": 2.35,
+      "전력비용": 3377003.0,
+      "설비": {
+        "기존 Q/R": {
+          "사용량": 12999.0,
+          "생산량": 5641.0,
+          "목표_원단위": 2.35,
+          "실적_원단위": 2.3,
+          "보수상태": null
+        },
+        "신설 Q/R": {
+          "사용량": 4235.0,
+          "생산량": 0.0,
+          "목표_원단위": 6.63,
+          "실적_원단위": null,
+          "보수상태": null
+        }
+      },
+      "최대목표초과설비": null,
+      "목표초과설비목록": []
+    },
+    "R": {
+      "label": "R (원료분쇄)",
+      "생산량": 13320.0,
+      "사용량": 202100.0,
+      "원단위": 15.17,
+      "목표_원단위": 10.17,
+      "전력비용": 35718521.0,
+      "설비": {
+        "1R": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": null,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "2R": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": null,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "3R": {
+          "사용량": 27781.0,
+          "생산량": 1250.0,
+          "목표_원단위": null,
+          "실적_원단위": 22.22,
+          "보수상태": null
+        },
+        "4R": {
+          "사용량": 1170.0,
+          "생산량": 0.0,
+          "목표_원단위": null,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "5R": {
+          "사용량": 32482.0,
+          "생산량": 1750.0,
+          "목표_원단위": null,
+          "실적_원단위": 18.56,
+          "보수상태": null
+        },
+        "6R": {
+          "사용량": 137603.0,
+          "생산량": 10320.0,
+          "목표_원단위": 13.12,
+          "실적_원단위": 13.33,
+          "보수상태": null
+        },
+        "7R": {
+          "사용량": 502.0,
+          "생산량": 0.0,
+          "목표_원단위": 33.77,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "8R": {
+          "사용량": 2562.0,
+          "생산량": 0.0,
+          "목표_원단위": 34.18,
+          "실적_원단위": null,
+          "보수상태": null
+        }
+      },
+      "최대목표초과설비": {
+        "설비": "6R",
+        "목표대비차이": 0.21,
+        "목표대비율": 1.6,
+        "검토필요": false
+      },
+      "목표초과설비목록": [
+        {
+          "설비": "6R",
+          "목표대비차이": 0.21,
+          "목표대비율": 1.6,
+          "검토필요": false
+        }
+      ]
+    },
+    "Co": {
+      "label": "Co (석탄분쇄)",
+      "생산량": 719.0,
+      "사용량": 16155.0,
+      "원단위": 22.47,
+      "목표_원단위": 44.94,
+      "전력비용": 2912246.0,
+      "설비": {
+        "1Co": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": 65.2,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "2Co": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": 59.67,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "3Co": {
+          "사용량": 9925.0,
+          "생산량": 613.0,
+          "목표_원단위": 44.95,
+          "실적_원단위": 16.19,
+          "보수상태": null
+        },
+        "4Co": {
+          "사용량": 6231.0,
+          "생산량": 106.0,
+          "목표_원단위": 44.91,
+          "실적_원단위": 58.78,
+          "보수상태": null
+        },
+        "5Co": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": 64.27,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "6Co": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": 124.45,
+          "실적_원단위": null,
+          "보수상태": null
+        }
+      },
+      "최대목표초과설비": {
+        "설비": "4Co",
+        "목표대비차이": 13.87,
+        "목표대비율": 30.9,
+        "검토필요": true
+      },
+      "목표초과설비목록": [
+        {
+          "설비": "4Co",
+          "목표대비차이": 13.87,
+          "목표대비율": 30.9,
+          "검토필요": true
+        }
+      ]
+    },
+    "K": {
+      "label": "K (소성)",
+      "생산량": 7537.0,
+      "사용량": 339991.0,
+      "원단위": 45.11,
+      "목표_원단위": 25.42,
+      "전력비용": 61845802.0,
+      "설비": {
+        "1K": {
+          "사용량": 2211.0,
+          "생산량": 0.0,
+          "목표_원단위": null,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "2K": {
+          "사용량": 2924.0,
+          "생산량": 0.0,
+          "목표_원단위": null,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "3K": {
+          "사용량": 139898.0,
+          "생산량": 1805.0,
+          "목표_원단위": null,
+          "실적_원단위": 77.51,
+          "보수상태": null
+        },
+        "5K": {
+          "사용량": 156227.0,
+          "생산량": 5732.0,
+          "목표_원단위": 33.43,
+          "실적_원단위": 27.26,
+          "보수상태": null
+        },
+        "6K": {
+          "사용량": 38731.0,
+          "생산량": 0.0,
+          "목표_원단위": 73.73,
+          "실적_원단위": null,
+          "보수상태": "정비중"
+        }
+      },
+      "최대목표초과설비": null,
+      "목표초과설비목록": []
+    },
+    "C": {
+      "label": "C (시멘트분쇄)",
+      "생산량": 11724.0,
+      "사용량": 422645.0,
+      "원단위": 36.05,
+      "목표_원단위": 39.39,
+      "전력비용": 67871070.0,
+      "설비": {
+        "1C": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": 37.33,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "2C": {
+          "사용량": 25126.0,
+          "생산량": 813.0,
+          "목표_원단위": 37.33,
+          "실적_원단위": 30.91,
+          "보수상태": null
+        },
+        "3C": {
+          "사용량": 24774.0,
+          "생산량": 701.0,
+          "목표_원단위": 37.33,
+          "실적_원단위": 35.34,
+          "보수상태": null
+        },
+        "4C": {
+          "사용량": 24300.0,
+          "생산량": 657.0,
+          "목표_원단위": 37.33,
+          "실적_원단위": 36.99,
+          "보수상태": null
+        },
+        "5C": {
+          "사용량": 36259.0,
+          "생산량": 828.0,
+          "목표_원단위": 38.56,
+          "실적_원단위": 43.79,
+          "보수상태": null
+        },
+        "6C": {
+          "사용량": 27626.0,
+          "생산량": 613.0,
+          "목표_원단위": 38.56,
+          "실적_원단위": 45.07,
+          "보수상태": null
+        },
+        "7C": {
+          "사용량": 48236.0,
+          "생산량": 918.0,
+          "목표_원단위": 38.56,
+          "실적_원단위": 52.54,
+          "보수상태": null
+        },
+        "8C": {
+          "사용량": 2274.0,
+          "생산량": 0.0,
+          "목표_원단위": 42.41,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "9C": {
+          "사용량": 56028.0,
+          "생산량": 1418.0,
+          "목표_원단위": 39.77,
+          "실적_원단위": 39.51,
+          "보수상태": null
+        },
+        "10C": {
+          "사용량": 124194.0,
+          "생산량": 3861.0,
+          "목표_원단위": 39.77,
+          "실적_원단위": 32.17,
+          "보수상태": null
+        },
+        "11C": {
+          "사용량": 0.0,
+          "생산량": 0.0,
+          "목표_원단위": 41.67,
+          "실적_원단위": null,
+          "보수상태": null
+        },
+        "12C": {
+          "사용량": 8488.0,
+          "생산량": 287.0,
+          "목표_원단위": 41.67,
+          "실적_원단위": 29.58,
+          "보수상태": null
+        },
+        "13C": {
+          "사용량": 45340.0,
+          "생산량": 1628.0,
+          "목표_원단위": 41.67,
+          "실적_원단위": 27.85,
+          "보수상태": null
+        }
+      },
+      "최대목표초과설비": {
+        "설비": "7C",
+        "목표대비차이": 13.98,
+        "목표대비율": 36.3,
+        "검토필요": true
+      },
+      "목표초과설비목록": [
+        {
+          "설비": "7C",
+          "목표대비차이": 13.98,
+          "목표대비율": 36.3,
+          "검토필요": true
+        },
+        {
+          "설비": "6C",
+          "목표대비차이": 6.51,
+          "목표대비율": 16.9,
+          "검토필요": false
+        },
+        {
+          "설비": "5C",
+          "목표대비차이": 5.23,
+          "목표대비율": 13.6,
+          "검토필요": false
+        }
+      ]
+    }
+  },
+  "extra": {
+    "출하": 6972.0,
+    "기타": 34347.0,
+    "폐열": 1607.0,
+    "판매사업": 47355.0
+  },
+  "total_usage_main4": 980891.0,
+  "total_usage_incl_crusher": 998125.0,
+  "total_target_usage_incl_crusher": 834341.0,
+  "total_cost": 186853012.0,
+  "tou": {
+    "경부하_비중": 51.5,
+    "중간부하_비중": 48.5,
+    "최대부하_비중": 0.0
+  },
+  "fee_type": {
+    "기본요금_비중": 6.7,
+    "사용요금_비중": 93.3
+  },
+  "cost_per_ton_cement": 15938.0,
+  "avg_price_per_kwh": 190.5
+};
+const GROUP_LABELS = {QR:"Crusher(원료수급)", R:"R/M(원료분쇄)", Co:"Co/M(석탄분쇄)", K:"K/L(소성)", C:"C/M(시멘트분쇄)"};
+const GROUP_COLORS = {QR:"#a685e2", R:"#e08a3c", Co:"#c9564a", K:"#4c8daa", C:"#5fa876"};
+const CORE_GROUP_KEYS = ["R","Co","K","C"];
+const UNIT_CHART_KEYS = ["QR","R","Co","K","C"];
+const REVIEW_THRESHOLD_PCT = 20;
+
+function fmt(n, d=0){ return n==null ? '-' : Number(n).toLocaleString('ko-KR', {maximumFractionDigits:d, minimumFractionDigits:d}); }
+
+document.getElementById('updatedAt').textContent = `기준일: ${D.date} (${D.weekday}, ${D.day_type}) · 단독 1일치`;
+
+// ---- KPI row (동일 구조, 전일 데이터 없어 delta 없음) ----
+const totalUnit = (D.total_usage_main4 && D.groups.C.생산량) ? D.total_usage_main4 / D.groups.C.생산량 : null;
+const kpis = [
+  {label:'Total 전력원단위 (kWh/t)', val: totalUnit, decimals:2},
+  {label:'전력비용 (원)', val: D.total_cost, decimals:0},
+  {label:'Crusher 원단위 (kWh/t)', val: D.groups.QR?.원단위, decimals:2},
+  {label:'R/M 원단위 (kWh/t)', val: D.groups.R.원단위, decimals:2},
+  {label:'Co/M 원단위 (kWh/t)', val: D.groups.Co.원단위, decimals:2},
+  {label:'K/L 원단위 (kWh/t)', val: D.groups.K.원단위, decimals:2},
+  {label:'C/M 원단위 (kWh/t)', val: D.groups.C.원단위, decimals:2},
+];
+document.getElementById('kpiRow').innerHTML = kpis.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value">${fmt(k.val,k.decimals)}</div></div>`
+).join('');
+
+// ---- Insight banner: 목표대비 변동폭 랭킹 (전일대비 대신, 1일치라 목표대비로 대체) ----
+const changes = [];
+CORE_GROUP_KEYS.forEach(k=>{
+  const cur = D.groups[k]?.원단위, tgt = D.groups[k]?.목표_원단위;
+  if (cur!=null && tgt) {
+    const pct = (cur-tgt)/tgt*100;
+    changes.push({k, pct, dir: pct>0?'초과':(pct<0?'미달':'동일')});
+  }
+});
+changes.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
+let insightHtml = '';
+changes.forEach((c,i)=>{
+  insightHtml += `<div class="insight-card"><span class="icon">${i===0?'⚠️':'▪️'}</span><div class="body">
+    <b>${i+1}위</b> — ${GROUP_LABELS[c.k]} 원단위가 목표대비 <b>${Math.abs(c.pct).toFixed(1)}% ${c.dir}</b>
+    ${i===0 ? ' (설비군별 기준 상이 — 방향성 참고용)' : ''}
+  </div></div>`;
+});
+insightHtml += `<div class="note-box">📝 <b>안내:</b> 이 리포트는 전력일보_2026.08.01.csv 1일치만으로 생성된 시연용 단독 스냅샷입니다. "목표대비"는 원래 시스템의 "전일대비" 지표를 1일치 데이터에 맞게 대체한 것입니다.</div>`;
+document.getElementById('insightBanner').innerHTML = insightHtml;
+
+// ---- Gap card: 목표 대비 실적 초과 상위 (원본과 동일 알고리즘) ----
+const allGaps = [];
+CORE_GROUP_KEYS.forEach(g=>{
+  const equipMap = D.groups[g]?.설비 || {};
+  Object.entries(equipMap).forEach(([name, e])=>{
+    if (!e.보수상태 && e.목표_원단위 && e.실적_원단위 && e.생산량 > 0) {
+      const diff = e.실적_원단위 - e.목표_원단위;
+      const pct = diff / e.목표_원단위 * 100;
+      if (pct > 0) allGaps.push({group: g, 설비: name, diff, pct});
+    }
+  });
+});
+allGaps.sort((a,b)=>b.pct-a.pct);
+const topGaps = allGaps.slice(0, 5);
+if (topGaps.length > 0) {
+  let html = '<div class="gap-card"><span class="icon">🎯</span><div class="body"><b>목표 대비 실적 초과 상위</b><br>';
+  html += topGaps.map((g,i)=>{
+    const reviewBadge = g.pct >= REVIEW_THRESHOLD_PCT ? ' <span class="verdict warn">검토필요</span>' : '';
+    return `${i+1}. ${GROUP_LABELS[g.group]} <b>${g.설비}</b>: +${g.pct.toFixed(1)}% (차이 +${g.diff.toFixed(2)} kWh/t)${reviewBadge}`;
+  }).join('<br>');
+  html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${D.date} 기준 · 목표대비 ${REVIEW_THRESHOLD_PCT}%p 이상 차이는 별도 검토가 필요합니다.</div></div></div>`;
+  document.getElementById('gapCard').innerHTML = html;
+}
+
+// ---- 보수중/재가동유예 설비 ----
+const inMaint = [];
+CORE_GROUP_KEYS.forEach(g=>{
+  const equipMap = D.groups[g]?.설비 || {};
+  Object.entries(equipMap).forEach(([name, e])=>{
+    if (e.보수상태) inMaint.push({group: g, 설비: name, status: e.보수상태});
+  });
+});
+if (inMaint.length > 0) {
+  let html = '<div class="maint-status-card"><span class="icon">🔧</span><div class="body"><b>보수중 / 재가동유예 설비</b> (목표초과 판정 제외)<br>';
+  html += inMaint.map(m=>`${GROUP_LABELS[m.group]} <b>${m.설비}</b> — ${m.status}`).join('<br>');
+  html += `<div style="margin-top:4px; font-size:11px; color:var(--muted);">${D.date} 기준.</div></div></div>`;
+  document.getElementById('maintStatusCard').innerHTML = html;
+}
+
+// ---- 요일 유형별 평균 비교 (원본과 동일 로직, 표본 1일이면 해당 유형만 채워짐) ----
+const dayTypes = ['평일','토요일','일요일'];
+const dtRows = dayTypes.map(t=>{
+  if (D.day_type !== t) return { t, n: 0 };
+  return { t, n: 1, usage: D.total_usage_main4, cost: D.total_cost, price: D.avg_price_per_kwh };
+});
+let dtHtml = '<tr><th style="text-align:left">구분</th><th>표본일수</th><th>평균 사용량(kWh)</th><th>평균 비용(원)</th><th>평균 단가(원/kWh)</th></tr>';
+dtRows.forEach(r=>{
+  if (r.n===0) { dtHtml += `<tr><td style="text-align:left">${r.t}</td><td colspan="4" style="color:var(--muted)">데이터 없음</td></tr>`; return; }
+  dtHtml += `<tr><td style="text-align:left">${r.t}</td><td>${r.n}일</td><td>${fmt(r.usage)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.price,1)}</td></tr>`;
+});
+document.getElementById('dayTypeTable').innerHTML = dtHtml;
+
+// ---- 설비군별 사용량 구성 ----
+new Chart(document.getElementById('usageChart'), {
+  type: 'bar',
+  data: {
+    labels: UNIT_CHART_KEYS.map(k=>GROUP_LABELS[k]),
+    datasets: [{ label: '사용량 (kWh)', data: UNIT_CHART_KEYS.map(k=>D.groups[k]?.사용량 ?? 0), backgroundColor: UNIT_CHART_KEYS.map(k=>GROUP_COLORS[k]), borderRadius: 4 }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#8a95a1' }, grid: { display: false } },
+      y: { ticks: { color: '#8a95a1', callback: v => fmt(v) }, grid: { color: '#2b333b' } }
+    }
+  }
+});
+
+// ---- 설비군별 원단위 실적 vs 목표 ----
+new Chart(document.getElementById('unitChart'), {
+  type: 'bar',
+  data: {
+    labels: UNIT_CHART_KEYS.map(k=>GROUP_LABELS[k]),
+    datasets: [
+      { label: '실적', data: UNIT_CHART_KEYS.map(k=>D.groups[k]?.원단위 ?? null), backgroundColor: UNIT_CHART_KEYS.map(k=>GROUP_COLORS[k]), borderRadius: 4 },
+      { label: '목표', data: UNIT_CHART_KEYS.map(k=>D.groups[k]?.목표_원단위 ?? null), backgroundColor: '#2b333b', borderRadius: 4 }
+    ]
+  },
+  options: {
+    plugins: { legend: { labels: { color: '#e7ebee' } } },
+    scales: {
+      x: { ticks: { color: '#8a95a1' }, grid: { display: false } },
+      y: { ticks: { color: '#8a95a1' }, grid: { color: '#2b333b' } }
+    }
+  }
+});
+
+// ---- 당일 단가 지표 ----
+document.getElementById('avgPriceVal').textContent = fmt(D.avg_price_per_kwh, 1);
+document.getElementById('costPerTonVal').textContent = fmt(D.cost_per_ton_cement, 0);
+
+// ---- TOU 도넛 ----
+const touLabels = [], touVals = [], touColors = [];
+const touMap = [['경부하_비중','#4c8daa'], ['중간부하_비중','#e08a3c'], ['최대부하_비중','#c9564a']];
+touMap.forEach(([key,color])=>{
+  const v = D.tou[key];
+  if (v != null && v > 0) { touLabels.push(key.replace('_비중','')); touVals.push(v); touColors.push(color); }
+});
+new Chart(document.getElementById('touChart'), {
+  type: 'doughnut',
+  data: { labels: touLabels, datasets: [{ data: touVals, backgroundColor: touColors, borderColor: '#1c2228', borderWidth: 2 }] },
+  options: { plugins: { legend: { position: 'bottom', labels: { color: '#e7ebee' } } } }
+});
+
+// ---- 설비군별 전력비용 ----
+new Chart(document.getElementById('costChart'), {
+  type: 'bar',
+  data: {
+    labels: UNIT_CHART_KEYS.map(k=>GROUP_LABELS[k]),
+    datasets: [{ label: '전력비용 (원)', data: UNIT_CHART_KEYS.map(k=>D.groups[k]?.전력비용 ?? 0), backgroundColor: UNIT_CHART_KEYS.map(k=>GROUP_COLORS[k]), borderRadius: 4 }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#8a95a1', callback: v => fmt(v) }, grid: { color: '#2b333b' } },
+      y: { ticks: { color: '#8a95a1' }, grid: { display: false } }
+    }
+  }
+});
+
+// ---- 설비별 상세 데이터 ----
+const rows = [];
+UNIT_CHART_KEYS.forEach(g=>{
+  const equipMap = D.groups[g]?.설비 || {};
+  Object.entries(equipMap).forEach(([name, e])=>{
+    let verdict = '';
+    if (e.목표_원단위 && e.실적_원단위 && e.생산량 > 0 && !e.보수상태) {
+      const pct = (e.실적_원단위 - e.목표_원단위) / e.목표_원단위 * 100;
+      if (pct >= REVIEW_THRESHOLD_PCT) verdict = '<span class="verdict warn">검토필요</span>';
+      else if (pct > 0) verdict = '<span class="verdict mid">초과</span>';
+      else verdict = '<span class="verdict ok">목표이내</span>';
+    }
+    rows.push({ group: GROUP_LABELS[g], name, 생산량: e.생산량, 사용량: e.사용량, 목표: e.목표_원단위, 실적: e.실적_원단위, maint: e.보수상태, verdict });
+  });
+});
+let tableHtml = '<tr><th>설비</th><th>그룹</th><th>생산량(Ton)</th><th>사용량(kWh)</th><th>목표원단위</th><th>실적원단위</th><th>상태</th></tr>';
+rows.forEach(r=>{
+  tableHtml += `<tr>
+    <td>${r.name}</td><td>${r.group}</td>
+    <td>${fmt(r.생산량)}</td><td>${fmt(r.사용량)}</td>
+    <td>${fmt(r.목표,2)}</td><td>${fmt(r.실적,2)}</td>
+    <td>${r.maint ? `<span class="badge" style="background:#2a3a4a;color:#8fc0e0;">${r.maint}</span>` : (r.verdict || '-')}</td>
+  </tr>`;
+});
+document.getElementById('detailTable').innerHTML = tableHtml;
+</script>
+</body>
+</html>
