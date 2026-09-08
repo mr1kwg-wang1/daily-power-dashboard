@@ -72,7 +72,8 @@ jobs:
                   lines.append(f"  - {it['설비']} (+{it['목표대비율']}%)")
               lines.append("")
 
-          lines.append("🔗 GitHub: mr1kwg-wang1/daily-power-dashboard (demo/2026-08-01/dashboard.html)")
+          dashboard_path = os.environ['DATA_FILE'].replace('data.json', 'dashboard.html')
+          lines.append(f"🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/{dashboard_path}")
 
           message = "\n".join(lines)
           with open("msg.txt", "w", encoding="utf-8") as f:
