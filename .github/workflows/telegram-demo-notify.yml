@@ -8,6 +8,7 @@ on:
     branches: [ main ]
     paths:
       - 'demo/**/data.json'
+  workflow_dispatch:
 
 jobs:
   notify-demo:
@@ -22,6 +23,74 @@ jobs:
           FILE=$(find demo -mindepth 2 -maxdepth 2 -name data.json | sort | tail -n1)
           if [ -z "$FILE" ]; then echo "demo/**/data.json 을 찾지 못했습니다" >&2; exit 1; fi
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: 한글 폰트 설치
+        run: sudo apt-get update -y -qq && sudo apt-get install -y -qq fonts-nanum
+
+      - name: 그래프 생성 (공정별 비용 비중)
+        env:
+          DATA_FILE: ${{ steps.find.outputs.file }}
+        run: |
+          pip install --quiet matplotlib
+          python3 << 'PYEOF'
+          import json, os
+          import matplotlib
+          matplotlib.use('Agg')
+          import matplotlib.pyplot as plt
+          import matplotlib.font_manager as fm
+
+          for f in fm.fontManager.ttflist:
+              if 'Nanum' in f.name:
+                  plt.rcParams['font.family'] = f.name
+                  break
+          plt.rcParams['axes.unicode_minus'] = False
+
+          with open(os.environ['DATA_FILE'], encoding='utf-8') as f:
+              d = json.load(f)
+
+          groups = d['groups']
+          costs = {
+              'C(시멘트분쇄)': groups.get('C', {}).get('전력비용') or 0,
+              'K(소성)': groups.get('K', {}).get('전력비용') or 0,
+              'R(원료분쇄)': groups.get('R', {}).get('전력비용') or 0,
+              'QR(원료수급)': groups.get('QR', {}).get('전력비용') or 0,
+              'Co(석탄분쇄)': groups.get('Co', {}).get('전력비용') or 0,
+          }
+          known = sum(costs.values())
+          total = d.get('total_cost') or known
+          costs['기타'] = max(total - known, 0)
+
+          items = sorted(costs.items(), key=lambda x: x[1], reverse=True)
+          labels = [k for k, v in items]
+          values_m = [v / 1e6 for k, v in items]
+          colors_map = {
+              'QR(원료수급)': '#a685e2', 'R(원료분쇄)': '#e08a3c', 'Co(석탄분쇄)': '#c9564a',
+              'K(소성)': '#4c8daa', 'C(시멘트분쇄)': '#5fa876', '기타': '#8a95a1',
+          }
+          bar_colors = [colors_map.get(k, '#8a95a1') for k in labels]
+
+          fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
+          fig.patch.set_facecolor('#14181c')
+          ax.set_facecolor('#14181c')
+          bars = ax.bar(labels, values_m, color=bar_colors, width=0.6)
+          top = max(values_m) if values_m else 1
+          for b, v in zip(bars, values_m):
+              pct = (v * 1e6 / total * 100) if total else 0
+              ax.text(b.get_x() + b.get_width() / 2, b.get_height() + top * 0.02,
+                       f"{v:,.1f}백만원\n({pct:.1f}%)", ha='center', va='bottom',
+                       color='#e7ebee', fontsize=9)
+
+          ax.set_title(f"{d['date']} 공정별 전력비용 비중 (합계 {total/1e6:,.1f}백만원)",
+                       color='#e7ebee', fontsize=13, pad=16)
+          ax.set_ylabel('전력비용 (백만원)', color='#8a95a1')
+          ax.tick_params(colors='#8a95a1')
+          for spine in ax.spines.values():
+              spine.set_color('#2b333b')
+          ax.grid(axis='y', color='#2b333b', linewidth=0.6)
+          ax.set_ylim(0, top * 1.25)
+          plt.tight_layout()
+          plt.savefig('chart.png', facecolor=fig.get_facecolor())
+          PYEOF
 
       - name: 메시지 생성 및 발송
         env:
@@ -50,17 +119,24 @@ jobs:
 
           labels = {"QR": "Crusher(원료수급)", "R": "R/M(원료분쇄)", "Co": "Co/M(석탄분쇄)", "K": "K/L(소성)", "C": "C/M(시멘트분쇄)"}
 
+          dashboard_path = os.environ['DATA_FILE'].replace('data.json', 'dashboard.html')
+          link = f"https://mr1kwg-wang1.github.io/daily-power-dashboard/{dashboard_path}"
+
+          caption_lines = []
+          caption_lines.append("🎬 *[시연용] 전력일보 단독 리포트*")
+          caption_lines.append(f"📅 {d['date']} ({d['weekday']})")
+          caption_lines.append(line("전체 사용량(Crusher+R+K+Co+C)", d.get('total_usage_incl_crusher'), d.get('total_target_usage_incl_crusher'), " kWh", 0))
+          caption_lines.append(f"· 전력비용: {fmt(d.get('total_cost'), 0)} 원")
+          caption_lines.append("⬇️ 상세 내용은 아래 메시지 참고")
+          with open("caption.txt", "w", encoding="utf-8") as f:
+              f.write("\n".join(caption_lines))
+
           lines = []
-          lines.append("🎬 *[시연용] 전력일보 단독 리포트*")
-          lines.append(f"📅 {d['date']} ({d['weekday']})")
           lines.append("_daily_data.json(7월 누적)과 연동되지 않은 1일치 단독 스냅샷입니다_")
           lines.append("")
           for k, label in labels.items():
               g = d['groups'].get(k, {})
               lines.append(line(label, g.get('원단위'), g.get('목표_원단위'), " kWh/t"))
-          lines.append("")
-          lines.append(line("전체 사용량(Crusher+R+K+Co+C)", d.get('total_usage_incl_crusher'), d.get('total_target_usage_incl_crusher'), " kWh", 0))
-          lines.append(f"· 전력비용: {fmt(d.get('total_cost'), 0)} 원")
           lines.append("")
 
           review = []
@@ -72,14 +148,20 @@ jobs:
                   lines.append(f"  - {it['설비']} (+{it['목표대비율']}%)")
               lines.append("")
 
-          dashboard_path = os.environ['DATA_FILE'].replace('data.json', 'dashboard.html')
-          lines.append(f"🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/{dashboard_path}")
+          lines.append(f"🔗 {link}")
 
           message = "\n".join(lines)
           with open("msg.txt", "w", encoding="utf-8") as f:
               f.write(message)
           PYEOF
 
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto" \
+            -F chat_id="${TELEGRAM_CHAT_ID}" \
+            -F photo=@chart.png \
+            -F parse_mode=Markdown \
+            -F "caption=<caption.txt"
+
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode=Markdown \
             --data-urlencode text@msg.txt

@@ -88,7 +88,6 @@
 <body>
 <header>
   <div>
-    <div class="demo-tag">🎬 8월 시연용 · 단독 스냅샷 (daily_data.json 비연동)</div>
     <h1>단양공장 전력일보 대시보드</h1>
     <div class="sub">Sungshin Cement · Danyang Plant · Daily Power Usage Monitor</div>
   </div>
@@ -108,18 +107,18 @@
   </section>
 
   <section>
-    <h2>설비군별 사용량 구성 (kWh) <span class="section-sub">— 당일 스냅샷</span></h2>
-    <div class="card"><div class="chart-wrap"><canvas id="usageChart"></canvas></div></div>
+    <h2 class="toggle-h2" data-target="body-usage-comp"><span class="tri">▶</span>설비군별 사용량 구성 (kWh) <span class="section-sub">— 당일 스냅샷</span><span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card collapsible-body" id="body-usage-comp" hidden><div class="chart-wrap"><canvas id="usageChart"></canvas></div></div>
   </section>
 
   <section>
-    <h2>설비군별 원단위 추이 (kWh/t)</h2>
-    <div class="card placeholder-card">현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
+    <h2 class="toggle-h2" data-target="body-unit-trend"><span class="tri">▶</span>설비군별 원단위 추이 (kWh/t)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card placeholder-card collapsible-body" id="body-unit-trend" hidden>현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
   </section>
 
   <section>
-    <h2>설비군별 원단위 — 실적 vs 목표 (kWh/t) <span class="section-sub">— 당일 스냅샷</span></h2>
-    <div class="card">
+    <h2 class="toggle-h2" data-target="body-unit-target"><span class="tri">▶</span>설비군별 원단위 — 실적 vs 목표 (kWh/t) <span class="section-sub">— 당일 스냅샷</span><span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card collapsible-body" id="body-unit-target" hidden>
       <div class="chart-wrap"><canvas id="unitChart"></canvas></div>
       <div style="margin-top:8px; font-size:11px; color:var(--muted);">
         ※ 설비군별 원단위는 각자 다른 생산량 기준(원료/석탄/클링커/시멘트)을 사용하므로, 그룹 간 절대값 비교보다 각 그룹의 목표대비 방향성 위주로 보시기 바랍니다.
@@ -130,12 +129,16 @@
   <section>
     <div class="grid2">
       <div class="card">
-        <h2 style="margin-top:0">평균 전력단가 추이 (원/kWh)</h2>
-        <div class="placeholder-card small">현재 1일치로는 추이 표시 불가. <b>2일 이상</b> 필요.</div>
+        <h2 class="toggle-h2" style="margin-top:0" data-target="body-avgprice"><span class="tri">▶</span>평균 전력단가 추이 (원/kWh)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+        <div class="collapsible-body" id="body-avgprice" hidden>
+          <div class="placeholder-card small">현재 1일치로는 추이 표시 불가. <b>2일 이상</b> 필요.</div>
+        </div>
       </div>
       <div class="card">
-        <h2 style="margin-top:0">시멘트 톤당 전력비 추이 (원/톤)</h2>
-        <div class="placeholder-card small">현재 1일치로는 추이 표시 불가. <b>2일 이상</b> 필요.</div>
+        <h2 class="toggle-h2" style="margin-top:0" data-target="body-costperton"><span class="tri">▶</span>시멘트 톤당 전력비 추이 (원/톤)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+        <div class="collapsible-body" id="body-costperton" hidden>
+          <div class="placeholder-card small">현재 1일치로는 추이 표시 불가. <b>2일 이상</b> 필요.</div>
+        </div>
       </div>
     </div>
   </section>
@@ -143,64 +146,68 @@
   <section>
     <div class="grid2">
       <div class="card">
-        <h2 style="margin-top:0">당일 단가 지표 <span class="section-sub">— 당일 스냅샷</span></h2>
-        <div class="kpi-row" style="grid-template-columns:1fr; gap:10px;">
-          <div class="kpi"><div class="label">평균 전력단가 (원/kWh)</div><div class="value" id="avgPriceVal">-</div></div>
-          <div class="kpi"><div class="label">시멘트 톤당 전력비 (원/톤)</div><div class="value" id="costPerTonVal">-</div></div>
+        <h2 class="toggle-h2" style="margin-top:0" data-target="body-price-kpi"><span class="tri">▶</span>당일 단가 지표 <span class="section-sub">— 당일 스냅샷</span><span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+        <div class="collapsible-body" id="body-price-kpi" hidden>
+          <div class="kpi-row" style="grid-template-columns:1fr; gap:10px;">
+            <div class="kpi"><div class="label">평균 전력단가 (원/kWh)</div><div class="value" id="avgPriceVal">-</div></div>
+            <div class="kpi"><div class="label">시멘트 톤당 전력비 (원/톤)</div><div class="value" id="costPerTonVal">-</div></div>
+          </div>
         </div>
       </div>
       <div class="card">
-        <h2 style="margin-top:0">시간대별 요금 비중 (TOU) <span class="section-sub">— 당일 스냅샷</span></h2>
-        <div class="chart-wrap short"><canvas id="touChart"></canvas></div>
+        <h2 class="toggle-h2" style="margin-top:0" data-target="body-tou"><span class="tri">▶</span>시간대별 요금 비중 (TOU) <span class="section-sub">— 당일 스냅샷</span><span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+        <div class="collapsible-body" id="body-tou" hidden>
+          <div class="chart-wrap short"><canvas id="touChart"></canvas></div>
+        </div>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>일별 전력비용 추이 (원)</h2>
-    <div class="card placeholder-card">현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
+    <h2 class="toggle-h2" data-target="body-cost-trend"><span class="tri">▶</span>일별 전력비용 추이 (원)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card placeholder-card collapsible-body" id="body-cost-trend" hidden>현재 1일치 데이터로는 추이(선 그래프)를 표시할 수 없습니다. <b>2일 이상</b> 누적되면 자동으로 표시됩니다.</div>
   </section>
 
   <section>
-    <h2>설비군별 전력비용 (원) <span class="section-sub">— 당일 스냅샷</span></h2>
-    <div class="card"><div class="chart-wrap"><canvas id="costChart"></canvas></div></div>
+    <h2 class="toggle-h2" data-target="body-cost-group"><span class="tri">▶</span>설비군별 전력비용 (원) <span class="section-sub">— 당일 스냅샷</span><span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card collapsible-body" id="body-cost-group" hidden><div class="chart-wrap"><canvas id="costChart"></canvas></div></div>
   </section>
 
   <section>
-    <h2>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)</h2>
-    <div class="card">
+    <h2 class="toggle-h2" data-target="body-daytype"><span class="tri">▶</span>요일 유형별 평균 비교 (평일 / 토요일 / 일요일)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card collapsible-body" id="body-daytype" hidden>
       <table id="dayTypeTable"></table>
       <div style="margin-top:8px; font-size:11px; color:var(--muted);">각 요일 유형별 표본이 쌓일수록(특히 평일 다수·주말 각 수 회 이상) 비교 신뢰도가 높아집니다.</div>
     </div>
   </section>
 
   <section>
-    <h2>변동 원인 분석 (그룹별 기여도)</h2>
-    <div class="card placeholder-card">현재 1일치 데이터로는 통계적 분석이 불안정합니다. <b>5일 이상</b> 누적되면 자동으로 표시됩니다.<br>
+    <h2 class="toggle-h2" data-target="body-variance"><span class="tri">▶</span>변동 원인 분석 (그룹별 기여도)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card placeholder-card collapsible-body" id="body-variance" hidden>현재 1일치 데이터로는 통계적 분석이 불안정합니다. <b>5일 이상</b> 누적되면 자동으로 표시됩니다.<br>
       <span style="font-size:11px; color:var(--muted);">※ 상관계수는 생산량과 사용량의 선형관계를 나타냅니다. 1에 가까우면 "생산량에 비례한 정상 변동", 0에 가까우면 "생산량과 무관한 전력 소모(주의 필요)"를 의미합니다.</span>
     </div>
   </section>
 
   <section>
-    <h2>설비별 변동성 상위 (CV 기준)</h2>
-    <div class="card placeholder-card">5일 이상 데이터가 쌓이면 표시됩니다.</div>
+    <h2 class="toggle-h2" data-target="body-volatility"><span class="tri">▶</span>설비별 변동성 상위 (CV 기준)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card placeholder-card collapsible-body" id="body-volatility" hidden>5일 이상 데이터가 쌓이면 표시됩니다.</div>
   </section>
 
   <section>
-    <h2>설비별 상세 데이터 (2026-08-01)</h2>
-    <div class="card" style="overflow-x:auto;">
+    <h2 class="toggle-h2" data-target="body-detail"><span class="tri">▶</span>설비별 상세 데이터 (2026-08-01)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card collapsible-body" id="body-detail" style="overflow-x:auto;" hidden>
       <table id="detailTable"></table>
     </div>
   </section>
 
   <section>
-    <h2>절감 예상 시나리오 1 (최대부하 비중 축소)</h2>
-    <div class="card placeholder-card">데이터가 충분하지 않습니다 (<b>5일 이상</b> 필요).</div>
+    <h2 class="toggle-h2" data-target="body-scenario1"><span class="tri">▶</span>절감 예상 시나리오 1 (최대부하 비중 축소)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card placeholder-card collapsible-body" id="body-scenario1" hidden>데이터가 충분하지 않습니다 (<b>5일 이상</b> 필요).</div>
   </section>
 
   <section>
-    <h2>절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이전)</h2>
-    <div class="card placeholder-card">데이터가 충분하지 않습니다 (<b>7일 이상</b> 필요).</div>
+    <h2 class="toggle-h2" data-target="body-scenario2"><span class="tri">▶</span>절감 예상 시나리오 2 (평일 최대부하 1시간 → 토·일 이전)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <div class="card placeholder-card collapsible-body" id="body-scenario2" hidden>데이터가 충분하지 않습니다 (<b>7일 이상</b> 필요).</div>
   </section>
 </main>
 
@@ -778,7 +785,8 @@ rows.forEach(r=>{
 });
 document.getElementById('detailTable').innerHTML = tableHtml;
 
-// ---- 접기/펼치기 토글 (선택된 섹션만 적용) ----
+// ---- 접기/펼치기 토글 (전 섹션 공통 적용) ----
+// 접힌 상태에서 생성된 Chart.js 캔버스는 크기가 0으로 잡히므로, 펼칠 때 resize()로 다시 그린다.
 document.querySelectorAll('.toggle-h2').forEach(h2 => {
   h2.addEventListener('click', () => {
     const body = document.getElementById(h2.dataset.target);
@@ -786,6 +794,14 @@ document.querySelectorAll('.toggle-h2').forEach(h2 => {
     const opening = body.hidden;
     body.hidden = !opening;
     h2.classList.toggle('open', opening);
+    const hint = h2.querySelector('.hint');
+    if (hint) hint.innerHTML = opening ? '눌러서 접기' : '<span class="tap-icon">👆</span>눌러서 보기';
+    if (opening) {
+      body.querySelectorAll('canvas').forEach(c => {
+        const chart = (window.Chart && Chart.getChart) ? Chart.getChart(c) : null;
+        if (chart) chart.resize();
+      });
+    }
   });
 });
 </script>
