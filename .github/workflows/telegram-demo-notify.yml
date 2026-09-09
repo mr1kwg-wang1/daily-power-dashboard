@@ -132,7 +132,7 @@ jobs:
               f.write("\n".join(caption_lines))
 
           lines = []
-          lines.append("_daily_data.json(7월 누적)과 연동되지 않은 1일치 단독 스냅샷입니다_")
+          lines.append("📌 *핵심요약*")
           lines.append("")
           for k, label in labels.items():
               g = d['groups'].get(k, {})
