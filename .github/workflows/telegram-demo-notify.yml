@@ -27,7 +27,7 @@ jobs:
       - name: 한글 폰트 설치
         run: sudo apt-get update -y -qq && sudo apt-get install -y -qq fonts-nanum
 
-      - name: 그래프 생성 (공정별 비용 비중)
+      - name: 그래프 생성 (공정별 비용 비중 + 원단위 실적vs목표)
         env:
           DATA_FILE: ${{ steps.find.outputs.file }}
         run: |
@@ -49,6 +49,8 @@ jobs:
               d = json.load(f)
 
           groups = d['groups']
+
+          # ---- 차트 1: 공정별 전력비용 비중 ----
           costs = {
               'C(시멘트분쇄)': groups.get('C', {}).get('전력비용') or 0,
               'K(소성)': groups.get('K', {}).get('전력비용') or 0,
@@ -61,25 +63,24 @@ jobs:
           costs['기타'] = max(total - known, 0)
 
           items = sorted(costs.items(), key=lambda x: x[1], reverse=True)
-          labels = [k for k, v in items]
-          values_m = [v / 1e6 for k, v in items]
+          c1_labels = [k for k, v in items]
+          c1_values = [v / 1e6 for k, v in items]
           colors_map = {
               'QR(원료수급)': '#a685e2', 'R(원료분쇄)': '#e08a3c', 'Co(석탄분쇄)': '#c9564a',
               'K(소성)': '#4c8daa', 'C(시멘트분쇄)': '#5fa876', '기타': '#8a95a1',
           }
-          bar_colors = [colors_map.get(k, '#8a95a1') for k in labels]
+          bar_colors = [colors_map.get(k, '#8a95a1') for k in c1_labels]
 
           fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
           fig.patch.set_facecolor('#14181c')
           ax.set_facecolor('#14181c')
-          bars = ax.bar(labels, values_m, color=bar_colors, width=0.6)
-          top = max(values_m) if values_m else 1
-          for b, v in zip(bars, values_m):
+          bars = ax.bar(c1_labels, c1_values, color=bar_colors, width=0.6)
+          top = max(c1_values) if c1_values else 1
+          for b, v in zip(bars, c1_values):
               pct = (v * 1e6 / total * 100) if total else 0
               ax.text(b.get_x() + b.get_width() / 2, b.get_height() + top * 0.02,
                        f"{v:,.1f}백만원\n({pct:.1f}%)", ha='center', va='bottom',
                        color='#e7ebee', fontsize=9)
-
           ax.set_title(f"{d['date']} 공정별 전력비용 비중 (합계 {total/1e6:,.1f}백만원)",
                        color='#e7ebee', fontsize=13, pad=16)
           ax.set_ylabel('전력비용 (백만원)', color='#8a95a1')
@@ -90,6 +91,37 @@ jobs:
           ax.set_ylim(0, top * 1.25)
           plt.tight_layout()
           plt.savefig('chart.png', facecolor=fig.get_facecolor())
+          plt.close(fig)
+
+          # ---- 차트 2: 설비군별 원단위 실적 vs 목표 ----
+          order = ["QR", "R", "Co", "K", "C"]
+          c2_labels = order
+          actual = [groups.get(k, {}).get('원단위') or 0 for k in order]
+          target = [groups.get(k, {}).get('목표_원단위') or 0 for k in order]
+
+          fig2, ax2 = plt.subplots(figsize=(8, 5), dpi=150)
+          fig2.patch.set_facecolor('#14181c')
+          ax2.set_facecolor('#14181c')
+          x = range(len(c2_labels))
+          w = 0.35
+          bars_a = ax2.bar([i - w/2 for i in x], actual, width=w, label='실적')
+          # 실적 막대는 그룹별 색상, 목표는 회색으로 통일
+          group_color_by_code = {'QR': '#a685e2', 'R': '#e08a3c', 'Co': '#c9564a', 'K': '#4c8daa', 'C': '#5fa876'}
+          for i, k in enumerate(c2_labels):
+              bars_a[i].set_color(group_color_by_code.get(k, '#8a95a1'))
+          bars_t = ax2.bar([i + w/2 for i in x], target, width=w, color='#3a4150', label='목표')
+          ax2.set_xticks(list(x))
+          ax2.set_xticklabels(c2_labels, color='#8a95a1')
+          ax2.set_title(f"{d['date']} 설비군별 원단위 실적 vs 목표 (kWh/t)", color='#e7ebee', fontsize=13, pad=16)
+          ax2.set_ylabel('원단위 (kWh/t)', color='#8a95a1')
+          ax2.tick_params(colors='#8a95a1')
+          for spine in ax2.spines.values():
+              spine.set_color('#2b333b')
+          ax2.grid(axis='y', color='#2b333b', linewidth=0.6)
+          leg = ax2.legend(facecolor='#14181c', edgecolor='#2b333b', labelcolor='#e7ebee')
+          plt.tight_layout()
+          plt.savefig('chart2.png', facecolor=fig2.get_facecolor())
+          plt.close(fig2)
           PYEOF
 
       - name: 메시지 생성 및 발송
@@ -122,26 +154,37 @@ jobs:
           dashboard_path = os.environ['DATA_FILE'].replace('data.json', 'dashboard.html')
           link = f"https://mr1kwg-wang1.github.io/daily-power-dashboard/{dashboard_path}"
 
-          caption_lines = []
-          caption_lines.append("🎬 *[시연용] 전력일보 단독 리포트*")
-          caption_lines.append(f"📅 {d['date']} ({d['weekday']})")
-          caption_lines.append(line("전체 사용량(Crusher+R+K+Co+C)", d.get('total_usage_incl_crusher'), d.get('total_target_usage_incl_crusher'), " kWh", 0))
-          caption_lines.append(f"· 전력비용: {fmt(d.get('total_cost'), 0)} 원")
-          caption_lines.append("⬇️ 상세 내용은 아래 메시지 참고")
-          with open("caption.txt", "w", encoding="utf-8") as f:
-              f.write("\n".join(caption_lines))
-
-          lines = []
-          lines.append("📌 *핵심요약*")
-          lines.append("")
-          for k, label in labels.items():
-              g = d['groups'].get(k, {})
-              lines.append(line(label, g.get('원단위'), g.get('목표_원단위'), " kWh/t"))
-          lines.append("")
-
           review = []
           for k in labels:
               review += [it for it in d['groups'].get(k, {}).get('목표초과설비목록', []) if it.get('검토필요')]
+          status_line = "✅ 상태: 정상" if not review else f"⚠️ 상태: 검토필요 {len(review)}건"
+
+          # ---- 사진 앨범 캡션 (짧게) ----
+          caption_lines = []
+          caption_lines.append("🎬 *[시연용] 전력일보 자동 집계 완료*")
+          caption_lines.append(f"📅 기준일: {d['date']} ({d['weekday']})")
+          caption_lines.append("📦 처리 데이터: 1일치 단독 (7월 누적 비연동)")
+          caption_lines.append(status_line)
+          caption_lines.append("")
+          caption_lines.append(line("전체 사용량(Crusher+R+K+Co+C)", d.get('total_usage_incl_crusher'), d.get('total_target_usage_incl_crusher'), " kWh", 0))
+          caption_lines.append(f"· 전력비용: {fmt(d.get('total_cost'), 0)} 원")
+          caption_lines.append("⬇️ 설비별 상세는 아래 메시지 참고")
+          with open("caption.txt", "w", encoding="utf-8") as f:
+              f.write("\n".join(caption_lines))
+
+          # ---- 상세 메시지: 설비군별 요약 표 + 검토필요 + 링크 ----
+          lines = []
+          lines.append("📌 *설비군별 요약*")
+          lines.append("```")
+          lines.append(f"{'설비':<4}{'생산량':>10}{'사용량':>12}{'원단위':>8}{'비용(백만)':>12}")
+          for k in labels:
+              g = d['groups'].get(k, {})
+              cost = g.get('전력비용')
+              cost_m = f"{cost/1e6:.1f}" if cost is not None else "-"
+              lines.append(f"{k:<4}{fmt(g.get('생산량')):>10}{fmt(g.get('사용량')):>12}{fmt(g.get('원단위'),2):>8}{cost_m:>12}")
+          lines.append("```")
+          lines.append("")
+
           if review:
               lines.append("⚠️ 검토필요 설비:")
               for it in review:
@@ -153,13 +196,20 @@ jobs:
           message = "\n".join(lines)
           with open("msg.txt", "w", encoding="utf-8") as f:
               f.write(message)
+
+          media = [
+              {"type": "photo", "media": "attach://chart1", "caption": "\n".join(caption_lines), "parse_mode": "Markdown"},
+              {"type": "photo", "media": "attach://chart2"},
+          ]
+          with open("media.json", "w", encoding="utf-8") as f:
+              json.dump(media, f, ensure_ascii=False)
           PYEOF
 
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto" \
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
             -F chat_id="${TELEGRAM_CHAT_ID}" \
-            -F photo=@chart.png \
-            -F parse_mode=Markdown \
-            -F "caption=<caption.txt"
+            -F media="<media.json" \
+            -F chart1=@chart.png \
+            -F chart2=@chart2.png
 
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
