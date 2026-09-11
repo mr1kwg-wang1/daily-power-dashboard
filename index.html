@@ -181,7 +181,7 @@
   </section>
 
   <section>
-    <h2 class="toggle-h2" data-target="body-scenario1"><span class="tri">▶</span>절감 예상 시나리오 1 (최대부하 비중 축소)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <h2 class="toggle-h2" data-target="body-scenario1"><span class="tri">▶</span>절감 예상 시나리오 1 (최대부하 비중 축소, 2026-10-1 개정 요금 기준)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
     <div class="card collapsible-body" id="body-scenario1" hidden>
       <div id="savingsStats" style="font-size:12px; color:var(--muted); margin-bottom:14px;"></div>
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
@@ -194,13 +194,13 @@
         <div class="kpi"><div class="label">예상 월간 절감액</div><div class="value" id="savingMonth">-</div></div>
         <div class="kpi"><div class="label">예상 연간 절감액</div><div class="value" id="savingYear">-</div></div>
       </div>
-      <div class="chart-wrap" style="margin-top:16px;"><canvas id="savingsChart" role="img" aria-label="최대부하 비중과 평균단가 상관관계"></canvas></div>
+      <div class="chart-wrap" style="margin-top:16px;"><canvas id="savingsChart" role="img" aria-label="시간대별 공식 계약단가"></canvas></div>
       <div style="margin-top:8px; font-size:11px; color:var(--muted);" id="savingsNote"></div>
     </div>
   </section>
 
   <section>
-    <h2 class="toggle-h2" data-target="body-scenario2"><span class="tri">▶</span>절감 예상 시나리오 2 (평일 최대부하 1시간 &rarr; 토&middot;일 이전)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
+    <h2 class="toggle-h2" data-target="body-scenario2"><span class="tri">▶</span>절감 예상 시나리오 2 (평일 최대부하 1시간 &rarr; 토&middot;일 이전, 2026-10-1 개정 요금 기준)<span class="hint"><span class="tap-icon">👆</span>눌러서 보기</span></h2>
     <div class="card collapsible-body" id="body-scenario2" hidden>
       <div id="shiftStats" style="font-size:12px; color:var(--muted); margin-bottom:14px;"></div>
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
@@ -601,49 +601,61 @@ function render(days, maintenanceLog){
 
   table.innerHTML = head + rows + avgRow;
 
-  // ---- 절감 예상 시나리오 (최대부하 비중 축소) ----
+  // ---- 절감 예상 시나리오 1 (최대부하 비중 축소, 2026-10-01 시행 산업용(을) 고압B 선택3 요금 기준) ----
   (function(){
-    const allPts = days.filter(d => d.tou?.최대부하_비중 != null && d.avg_price_per_kwh != null && d.total_usage_main4 != null)
-                     .map(d => { const w = new Date(d.date + 'T00:00:00').getDay(); return {x: d.tou.최대부하_비중, y: d.avg_price_per_kwh, usage: d.total_usage_main4, isWeekday: (w>=1 && w<=5)}; });
-    const pts = allPts.filter(p => p.isWeekday);
-    const weekendPts = allPts.filter(p => !p.isWeekday);
+    // 시나리오 2와 동일한 공식 고시 단가(원/kWh). 기본요금(8,190원/kW)은 미반영.
+    const TOU_RATES = {
+      summer:     { off: 125.9, mid: 173.1, peak: 237.5 }, // 여름철(6~8월)
+      springFall: { off: 125.9, mid: 143.2, peak: 160.3 }, // 봄·가을철(3~5월, 9~10월)
+      winter:     { off: 133.0, mid: 173.1, peak: 212.4 }, // 겨울철(11~2월)
+    };
+    function seasonOf(month) {
+      if (month >= 6 && month <= 8) return 'summer';
+      if (month === 11 || month === 12 || month <= 2) return 'winter';
+      return 'springFall';
+    }
+
+    const weekdayPts = days.filter(d => {
+      const w = new Date(d.date + 'T00:00:00').getDay();
+      return (w>=1 && w<=5) && d.tou?.최대부하_비중 != null && d.tou?.중간부하_비중 != null && d.tou?.경부하_비중 != null && d.total_usage_main4 != null;
+    });
     const statsEl = document.getElementById('savingsStats');
     const noteEl = document.getElementById('savingsNote');
-    if (pts.length < 5) {
-      if (statsEl) statsEl.textContent = '데이터가 충분하지 않습니다 (5일 이상 필요).';
+    if (weekdayPts.length < 1) {
+      if (statsEl) statsEl.textContent = '평일 데이터가 없습니다.';
       return;
     }
-    const n = pts.length;
-    const sumX = pts.reduce((s,p)=>s+p.x,0);
-    const sumY = pts.reduce((s,p)=>s+p.y,0);
-    const sumXY = pts.reduce((s,p)=>s+p.x*p.y,0);
-    const sumXX = pts.reduce((s,p)=>s+p.x*p.x,0);
-    const denom = (n*sumXX - sumX*sumX);
-    const b = denom !== 0 ? (n*sumXY - sumX*sumY) / denom : 0;
-    const a = (sumY - b*sumX) / n;
-    const meanY = sumY / n;
-    const ssTot = pts.reduce((s,p)=>s+(p.y-meanY)**2, 0);
-    const ssRes = pts.reduce((s,p)=>{ const pred = a + b*p.x; return s + (p.y-pred)**2; }, 0);
-    const r2 = ssTot !== 0 ? 1 - ssRes/ssTot : 0;
-    const avgPeakShare = sumX / n;
-    const avgPrice = sumY / n;
-    const avgUsage = pts.reduce((s,p)=>s+p.usage,0) / n;
-    const minPeak = Math.min(...pts.map(p=>p.x));
-    const maxPeak = Math.max(...pts.map(p=>p.x));
+    const n = weekdayPts.length;
+    const mean = arr => arr.reduce((s,v)=>s+v,0) / arr.length;
+    const avgOffShare = mean(weekdayPts.map(d=>d.tou.경부하_비중));
+    const avgMidShare = mean(weekdayPts.map(d=>d.tou.중간부하_비중));
+    const avgPeakShare = mean(weekdayPts.map(d=>d.tou.최대부하_비중));
+    const avgUsage = mean(weekdayPts.map(d=>d.total_usage_main4));
+
+    const latestDateStr = weekdayPts[weekdayPts.length-1].date;
+    const latestMonth = new Date(latestDateStr + 'T00:00:00').getMonth() + 1;
+    const season = seasonOf(latestMonth);
+    const seasonLabel = season === 'summer' ? '여름철(6~8월)' : season === 'winter' ? '겨울철(11~2월)' : '봄가을철(3~5월,9~10월)';
+    const rates = TOU_RATES[season];
+    const currentAvgPrice = (avgOffShare*rates.off + avgMidShare*rates.mid + avgPeakShare*rates.peak) / 100;
 
     if (statsEl) {
-      statsEl.innerHTML = `평일 <b>${n}일</b> 데이터 기준(주말 ${weekendPts.length}일은 요금제상 최대부하가 구조적으로 0%가 되어 회귀분석에서 제외) · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b>(관측범위 ${fmt(minPeak,1)}~${fmt(maxPeak,1)}%) · 평균 단가 <b>${fmt(avgPrice,1)}원/kWh</b> · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b> · 상관도(R²) <b>${fmt(r2*100,0)}%</b>`;
+      statsEl.innerHTML = `평일 <b>${n}일</b> 데이터 기준(관측 계절: ${seasonLabel}) · 평균 최대부하 비중 <b>${fmt(avgPeakShare,1)}%</b> · 산업용(을) 고압B 선택3 요금(2026-10-01 시행) 기준 계산 평균단가 <b>${fmt(currentAvgPrice,1)}원/kWh</b>(경부하 ${rates.off}·중간부하 ${rates.mid}·최대부하 ${rates.peak}원/kWh) · 평균 일 사용량 <b>${fmt(avgUsage,0)}kWh</b>`;
     }
 
     const slider = document.getElementById('peakReduceSlider');
     const sliderValueEl = document.getElementById('peakReduceValue');
-    const maxReduce = Math.max(1, Math.floor(avgPeakShare - minPeak));
+    const maxReduce = Math.max(1, Math.floor(avgPeakShare));
     if (slider) { slider.max = maxReduce; if (Number(slider.value) > maxReduce) slider.value = maxReduce; }
 
     function update() {
       const delta = Number(slider ? slider.value : 10);
       if (sliderValueEl) sliderValueEl.textContent = delta + '%p';
-      const priceSaving = b * delta;
+      // 감소된 최대부하 사용량은 전량 중간부하로 이전된다고 가정(경부하로 이전되면 절감액은 더 커짐 - 보수적 가정)
+      const newPeakShare = Math.max(0, avgPeakShare - delta);
+      const newMidShare = avgMidShare + (avgPeakShare - newPeakShare);
+      const newAvgPrice = (avgOffShare*rates.off + newMidShare*rates.mid + newPeakShare*rates.peak) / 100;
+      const priceSaving = currentAvgPrice - newAvgPrice;
       const dailySaving = priceSaving * avgUsage;
       const monthlySaving = dailySaving * 30;
       const yearlySaving = dailySaving * 365;
@@ -660,27 +672,26 @@ function render(days, maintenanceLog){
     update();
 
     if (noteEl) {
-      const validity = b > 0 ? '' : ' (주의: 현재 데이터에서는 최대부하 비중과 단가 간 뚜렷한 양의 상관관계가 확인되지 않아 추정치의 신뢰도가 낮습니다.)';
-      noteEl.textContent = `※ 이 추정치는 최근 ${n}일간 평일 데이터(주말은 요금제상 최대부하가 구조적으로 0%가 되어 상관관계를 왜곡하므로 회귀분석에서 제외)에서 "최대부하 비중"과 "평균 단가"의 상관관계(선형회귀, R² ${fmt(r2*100,0)}%)를 근거로 한 근사치입니다. 관측된 평일 최대부하 비중 범위(${fmt(minPeak,1)}~${fmt(maxPeak,1)}%)를 벗어나는 감소폭은 외삽 오차가 커질 수 있어 슬라이더 최대값을 이 범위 내로 제한했습니다. 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.${validity}`;
+      noteEl.textContent = `※ 이 추정치는 회귀분석이 아니라, 산업용(을) 고압B 선택3 공식 고시 계약단가(2026-10-01 시행, ${seasonLabel} 기준)와 최근 ${n}일 평일 평균 시간대별 사용비중(경부하 ${fmt(avgOffShare,1)}%·중간부하 ${fmt(avgMidShare,1)}%·최대부하 ${fmt(avgPeakShare,1)}%)을 결합한 계산입니다. 감소된 최대부하 사용량은 전량 중간부하로 이전된다고 가정했습니다(경부하로 이전되면 절감액은 이보다 더 커짐 - 보수적 가정). 기본요금(8,190원/kW)은 이 계산에 포함되지 않습니다. 실제 절감액은 계절별 요금 구조·조업 패턴 변화에 따라 달라질 수 있습니다.`;
     }
 
-    const xs = pts.map(p=>p.x);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
     new Chart(document.getElementById('savingsChart'), {
-      type: 'scatter',
+      type: 'bar',
       data: {
-        datasets: [
-          { label: '평일 데이터(회귀 반영)', data: pts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#e08a3c', pointRadius:4 },
-          { label: '주말 데이터(회귀 제외)', data: weekendPts.map(p=>({x:p.x,y:p.y})), backgroundColor:'#5a6470', pointRadius:3 },
-          { label: '추세선(평일 기준)', data: [{x:minX, y:a+b*minX},{x:maxX, y:a+b*maxX}], type:'line', borderColor:'#4c8daa', borderWidth:2, pointRadius:0, fill:false, showLine:true }
-        ]
+        labels: ['경부하', '중간부하', '최대부하'],
+        datasets: [{
+          label: `${seasonLabel} 계약단가(원/kWh)`,
+          data: [rates.off, rates.mid, rates.peak],
+          backgroundColor: ['#5fa876', '#4c8daa', '#c9564a'],
+          borderRadius: 4, maxBarThickness: 60
+        }]
       },
       options: {
         responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ position:'bottom', labels:{color:'#8a95a1', boxWidth:10, font:{size:11}} } },
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => fmt(ctx.parsed.y,1) + '원/kWh' } } },
         scales:{
-          x:{ title:{display:true, text:'최대부하 비중 (%)', color:'#8a95a1'}, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} },
-          y:{ title:{display:true, text:'평균 단가 (원/kWh)', color:'#8a95a1'}, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} }
+          y:{ title:{display:true, text:'원/kWh', color:'#8a95a1'}, grid:{color:'#2b333b'}, ticks:{color:'#8a95a1'} },
+          x:{ grid:{display:false}, ticks:{color:'#8a95a1'} }
         }
       }
     });
