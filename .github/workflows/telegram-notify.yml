@@ -60,7 +60,7 @@ jobs:
           lines.append(target_delta_line("합계(Crusher+R+K+Co+C)", last.get('total_usage_incl_crusher'), last.get('total_target_usage_incl_crusher'), " kWh", 0))
           lines.append(f"· 전력비용: {fmt(last.get('total_cost'), 0)} 원")
           lines.append("")
-          lines.append("🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/")
+          lines.append("🔗 https://rlwhd3961-1.github.io/daily-power-dashboard/")
           lines.append("")
 
           message = "\n".join(lines)
