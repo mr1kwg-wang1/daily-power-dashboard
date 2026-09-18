@@ -21,7 +21,7 @@ jobs:
 
           ${COMMIT_MSG}
 
-          🔗 https://rlwhd3961-1.github.io/daily-power-dashboard/"
+          🔗 https://mr1kwg-wang1.github.io/daily-power-dashboard/"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             --data-urlencode text="${MESSAGE}"
