@@ -1,6 +1,6 @@
 """
 성신양회 단양공장 전력일보 자동 파싱 스크립트
-사용법: python parse_daily_report.py <전력일보_YYYY_MM_DD.csv>
+사용법: python parse_daily_report.py <전력일보_YYYY.MM.DD.csv>
 같은 폴더의 daily_data.json 에 해당 일자 데이터를 추가/갱신한다.
 """
 import sys, csv, re, json, datetime
@@ -67,7 +67,8 @@ def parse_file(path: Path, prior_days=None):
     with open(path, encoding="utf-8-sig") as f:
         rows = list(csv.reader(f))
 
-    m = re.search(r"(\d{4})_(\d{2})_(\d{2})", path.stem)
+    # 원본 파일명은 "전력일보_2026.07.01.csv"(점) 형식이 많아 _ . - 구분자를 모두 허용
+    m = re.search(r"(\d{4})[._-](\d{2})[._-](\d{2})", path.stem)
     if not m:
         raise ValueError(f"파일명에서 날짜를 찾을 수 없습니다: {path.name}")
     date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
@@ -191,7 +192,7 @@ def parse_file(path: Path, prior_days=None):
 
 def main():
     if len(sys.argv) < 2:
-        print("사용법: python parse_daily_report.py <전력일보_YYYY_MM_DD.csv>")
+        print("사용법: python parse_daily_report.py <전력일보_YYYY.MM.DD.csv>")
         sys.exit(1)
 
     src = Path(sys.argv[1])
@@ -212,7 +213,8 @@ def main():
     data["days"].append(entry)
     data["days"].sort(key=lambda d: d["date"])
 
-    data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # newline="\n": Windows에서 CRLF로 저장되면 커밋 시 파일 전체가 변경된 것으로 잡히므로 LF 고정
+    data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
     print(f"[OK] {entry['date']} 데이터를 daily_data.json 에 반영했습니다. (총 {len(data['days'])}일 누적)")
 
 if __name__ == "__main__":
